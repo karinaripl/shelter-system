@@ -1,1 +1,1 @@
-com.booking.gateway_auth_starter.config.GatewayAuthAutoConfiguration
+com.shelter.gatewayauth.config.GatewayAuthAutoConfiguration
