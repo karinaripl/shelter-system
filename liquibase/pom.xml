@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0_0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -13,6 +13,17 @@
 
     <artifactId>liquibase</artifactId>
     <packaging>jar</packaging>
+
+    <!--
+        Применить миграции к локальной базе из docker-compose:
+          mvn -pl liquibase liquibase:update
+        Другая база: -Ddb.url=... -Ddb.username=... -Ddb.password=...
+    -->
+    <properties>
+        <db.url>jdbc:postgresql://localhost:5432/shelter</db.url>
+        <db.username>shelter</db.username>
+        <db.password>shelter</db.password>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -31,9 +42,18 @@
             <plugin>
                 <groupId>org.liquibase</groupId>
                 <artifactId>liquibase-maven-plugin</artifactId>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.postgresql</groupId>
+                        <artifactId>postgresql</artifactId>
+                        <version>${postgresql.version}</version>
+                    </dependency>
+                </dependencies>
                 <configuration>
-                    <propertyFile>local.properties</propertyFile>
                     <driver>org.postgresql.Driver</driver>
+                    <url>${db.url}</url>
+                    <username>${db.username}</username>
+                    <password>${db.password}</password>
                     <changeLogFile>db/changelog/db.changelog-master.xml</changeLogFile>
                     <searchPath>${project.basedir}/src/main/resources</searchPath>
                 </configuration>

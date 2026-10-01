@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0_0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -13,6 +13,16 @@
 
     <artifactId>model</artifactId>
     <packaging>jar</packaging>
+
+    <!--
+        Сгенерированные jOOQ-классы хранятся в репозитории (src/main/java/.../generated),
+        поэтому обычная сборка (mvn package) НЕ требует запущенной базы данных.
+
+        Перегенерировать классы после изменения миграций:
+          1) поднять базу и применить миграции (см. README);
+          2) mvn -pl model -Pjooq-codegen generate-sources
+        Параметры подключения можно переопределить: -Ddb.url=... -Ddb.username=... -Ddb.password=...
+    -->
 
     <dependencies>
         <dependency>
@@ -26,39 +36,30 @@
         </dependency>
     </dependencies>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>properties-maven-plugin</artifactId>
-                <version>1.2.1</version>
-                <executions>
-                    <execution>
-                        <phase>initialize</phase>
-                        <goals>
-                            <goal>read-project-properties</goal>
-                        </goals>
-                        <configuration>
-                            <files>
-                                <file>${project.basedir}/local.properties</file>
-                            </files>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
+    <profiles>
+        <profile>
+            <id>jooq-codegen</id>
 
-            <plugin>
-                <groupId>org.jooq</groupId>
-                <artifactId>jooq-codegen-maven</artifactId>
-                <version>3.21.6</version>
-                <executions>
-                    <!-- Генерация для users_schema -->
-                    <execution>
-                        <id>generate-users</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
+            <properties>
+                <db.url>jdbc:postgresql://localhost:5432/shelter</db.url>
+                <db.username>shelter</db.username>
+                <db.password>shelter</db.password>
+            </properties>
+
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jooq</groupId>
+                        <artifactId>jooq-codegen-maven</artifactId>
+                        <!-- версия совпадает с jOOQ, который подключает Spring Boot -->
+                        <version>${jooq.version}</version>
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.postgresql</groupId>
+                                <artifactId>postgresql</artifactId>
+                                <version>${postgresql.version}</version>
+                            </dependency>
+                        </dependencies>
                         <configuration>
                             <jdbc>
                                 <driver>org.postgresql.Driver</driver>
@@ -66,75 +67,72 @@
                                 <user>${db.username}</user>
                                 <password>${db.password}</password>
                             </jdbc>
-                            <generator>
-                                <database>
-                                    <name>org.jooq.meta.postgres.PostgresDatabase</name>
-                                    <inputSchema>users_schema</inputSchema>
-                                </database>
-                                <target>
-                                    <packageName>com.shelter.model.generated.auth</packageName>
-                                    <directory>src/main/java</directory>
-                                </target>
-                            </generator>
                         </configuration>
-                    </execution>
+                        <executions>
+                            <execution>
+                                <id>generate-users</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <generator>
+                                        <database>
+                                            <name>org.jooq.meta.postgres.PostgresDatabase</name>
+                                            <inputSchema>users_schema</inputSchema>
+                                        </database>
+                                        <target>
+                                            <packageName>com.shelter.model.generated.auth</packageName>
+                                            <directory>src/main/java</directory>
+                                        </target>
+                                    </generator>
+                                </configuration>
+                            </execution>
 
-                    <!-- Генерация для booking_schema -->
-                    <execution>
-                        <id>generate-booking</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
-                        <configuration>
-                            <jdbc>
-                                <driver>org.postgresql.Driver</driver>
-                                <url>${db.url}</url>
-                                <user>${db.username}</user>
-                                <password>${db.password}</password>
-                            </jdbc>
-                            <generator>
-                                <database>
-                                    <name>org.jooq.meta.postgres.PostgresDatabase</name>
-                                    <inputSchema>booking_schema</inputSchema>
-                                </database>
-                                <target>
-                                    <packageName>com.shelter.model.generated.booking</packageName>
-                                    <directory>src/main/java</directory>
-                                </target>
-                            </generator>
-                        </configuration>
-                    </execution>
+                            <execution>
+                                <id>generate-booking</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <generator>
+                                        <database>
+                                            <name>org.jooq.meta.postgres.PostgresDatabase</name>
+                                            <inputSchema>booking_schema</inputSchema>
+                                        </database>
+                                        <target>
+                                            <packageName>com.shelter.model.generated.booking</packageName>
+                                            <directory>src/main/java</directory>
+                                        </target>
+                                    </generator>
+                                </configuration>
+                            </execution>
 
-                    <!-- Генерация для room_schema -->
-                    <execution>
-                        <id>generate-room</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
-                        <configuration>
-                            <jdbc>
-                                <driver>org.postgresql.Driver</driver>
-                                <url>${db.url}</url>
-                                <user>${db.username}</user>
-                                <password>${db.password}</password>
-                            </jdbc>
-                            <generator>
-                                <database>
-                                    <name>org.jooq.meta.postgres.PostgresDatabase</name>
-                                    <inputSchema>room_schema</inputSchema>
-                                </database>
-                                <target>
-                                    <packageName>com.shelter.model.generated.room</packageName>
-                                    <directory>src/main/java</directory>
-                                </target>
-                            </generator>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
+                            <execution>
+                                <id>generate-room</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <generator>
+                                        <database>
+                                            <name>org.jooq.meta.postgres.PostgresDatabase</name>
+                                            <inputSchema>room_schema</inputSchema>
+                                        </database>
+                                        <target>
+                                            <packageName>com.shelter.model.generated.room</packageName>
+                                            <directory>src/main/java</directory>
+                                        </target>
+                                    </generator>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

@@ -1,0 +1,27 @@
+# Локальное окружение для разработки.
+# Сейчас поднимает только PostgreSQL; сервисы запускаются из IDE или через mvn spring-boot:run.
+#
+#   docker compose up -d        — запустить базу
+#   docker compose down         — остановить (данные сохранятся в volume)
+#   docker compose down -v      — остановить и удалить данные
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: shelter-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-shelter}
+      POSTGRES_USER: ${DB_USERNAME:-shelter}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-shelter}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - shelter-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  shelter-pgdata:
