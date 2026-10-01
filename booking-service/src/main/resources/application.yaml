@@ -5,6 +5,10 @@ spring:
     active: local
   liquibase:
     enabled: false
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/shelter}
+    username: ${DB_USERNAME:shelter}
+    password: ${DB_PASSWORD:shelter}
 
 server:
   port: 8081
@@ -14,7 +18,7 @@ gateway:
     secret: ${JWT_SECRET}
 
 room-service:
-  url: http://localhost:8083
+  url: ${ROOM_SERVICE_URL:http://localhost:8083}
 
 notification-service:
-  url: http://localhost:8082
+  url: ${NOTIFICATION_SERVICE_URL:http://localhost:8082}
