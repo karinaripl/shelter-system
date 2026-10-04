@@ -128,6 +128,26 @@
                                     </generator>
                                 </configuration>
                             </execution>
+
+                            <execution>
+                                <id>generate-shelter</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <generator>
+                                        <database>
+                                            <name>org.jooq.meta.postgres.PostgresDatabase</name>
+                                            <inputSchema>shelter_schema</inputSchema>
+                                        </database>
+                                        <target>
+                                            <packageName>com.shelter.model.generated.shelter</packageName>
+                                            <directory>src/main/java</directory>
+                                        </target>
+                                    </generator>
+                                </configuration>
+                            </execution>
                         </executions>
                     </plugin>
                 </plugins>

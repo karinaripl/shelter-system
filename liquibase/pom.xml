@@ -23,11 +23,14 @@
         2) Вручную из Maven (база из docker compose должна быть запущена):
              mvn -pl liquibase liquibase:update
            Другая база: -Ddb.url=... -Ddb.username=... -Ddb.password=...
+           С демонстрационными данными: -Dliquibase.contexts=default,demo
     -->
     <properties>
         <db.url>jdbc:postgresql://localhost:5433/shelter</db.url>
         <db.username>shelter</db.username>
         <db.password>shelter</db.password>
+        <!-- Без явного контекста Liquibase применил бы и демонстрационные данные -->
+        <liquibase.contexts>default</liquibase.contexts>
     </properties>
 
     <dependencies>

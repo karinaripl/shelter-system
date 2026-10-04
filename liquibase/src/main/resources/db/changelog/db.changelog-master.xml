@@ -11,4 +11,6 @@
 
     <include file="db/changelog/room/V1__create_room_table.xml"/>
 
+    <include file="db/changelog/shelter/V1__create_shelter_schema.xml"/>
+
 </databaseChangeLog>

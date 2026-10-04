@@ -14,3 +14,7 @@ spring:
     password: ${DB_PASSWORD:shelter}
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.xml
+    # Контексты миграций. Без явного контекста Liquibase применил бы ВСЕ changeset,
+    # включая демонстрационные. По умолчанию — только схема и справочники;
+    # демо-данные: LIQUIBASE_CONTEXTS=default,demo (так задано в docker-compose.yml)
+    contexts: ${LIQUIBASE_CONTEXTS:default}

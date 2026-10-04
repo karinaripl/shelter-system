@@ -53,6 +53,9 @@ services:
     image: shelter/migrations
     environment:
       <<: *java-env
+      # default — схема и справочники, demo — демонстрационные данные приюта.
+      # Чтобы не загружать демо-данные: LIQUIBASE_CONTEXTS=default в .env
+      LIQUIBASE_CONTEXTS: ${LIQUIBASE_CONTEXTS:-default,demo}
     depends_on:
       postgres:
         condition: service_healthy

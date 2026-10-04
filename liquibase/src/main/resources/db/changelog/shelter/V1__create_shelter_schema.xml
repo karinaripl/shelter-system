@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <!-- Схема приюта. Описание таблиц и связей: docs/database.md -->
+
+    <changeSet id="shelter-V1" author="olga">
+        <comment>Справочники: статусы животных, источники поступления, виды процедур, должности, категории товаров</comment>
+        <sqlFile path="db/changelog/shelter/V1__dictionaries.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V1__dictionaries_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="shelter-V2" author="olga">
+        <comment>Люди: сотрудники и волонтёры</comment>
+        <sqlFile path="db/changelog/shelter/V2__people.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V2__people_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="shelter-V3" author="olga">
+        <comment>Животные и клетки, закрепление волонтёров за животными</comment>
+        <sqlFile path="db/changelog/shelter/V3__animals.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V3__animals_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="shelter-V4" author="olga">
+        <comment>Финансы: благотворители, пожертвования, журнал операций, зарплата</comment>
+        <sqlFile path="db/changelog/shelter/V4__finance.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V4__finance_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="shelter-V5" author="olga">
+        <comment>Склад: товары, поставщики, поставки, партии, остатки, расход, списания</comment>
+        <sqlFile path="db/changelog/shelter/V5__warehouse.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V5__warehouse_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="shelter-V6" author="olga">
+        <comment>Медицина: медкарты, приёмы, процедуры, нормы расхода</comment>
+        <sqlFile path="db/changelog/shelter/V6__medical.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V6__medical_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="shelter-V7" author="olga">
+        <comment>Мероприятия и участие животных</comment>
+        <sqlFile path="db/changelog/shelter/V7__events.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V7__events_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="shelter-V8" author="olga">
+        <comment>Начальные значения справочников</comment>
+        <sqlFile path="db/changelog/shelter/V8__dictionary_data.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V8__dictionary_data_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <!-- Демонстрационные данные: применяются только с контекстом demo -->
+    <changeSet id="shelter-V9-demo" author="olga" context="demo">
+        <comment>Демонстрационные данные</comment>
+        <sqlFile path="db/changelog/shelter/V9__demo_data.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V9__demo_data_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
