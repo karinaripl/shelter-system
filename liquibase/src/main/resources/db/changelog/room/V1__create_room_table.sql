@@ -1,0 +1,11 @@
+CREATE SCHEMA IF NOT EXISTS room_schema;
+
+CREATE TABLE room_schema.rooms (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    capacity INT NOT NULL,
+    description TEXT,
+    location VARCHAR(255) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: auth-service
+  config:
+    # Подхватываем .env из корня проекта (работает и при запуске из корня, и из папки модуля)
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
+  profiles:
+    active: local
+  liquibase:
+    enabled: false
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/shelter}
+    username: ${DB_USERNAME:shelter}
+    password: ${DB_PASSWORD:shelter}
+server:
+  port: 8180
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+gateway:
+  auth:
+    secret: ${JWT_SECRET}
+    # Доступны без входа в систему
+    public-paths: /auth/register, /auth/login
+
+# Первый администратор. Создаётся при запуске, если в системе ещё нет ни одного ADMIN
+# и заданы email и пароль. Если не заданы — шаг пропускается.
+admin:
+  bootstrap:
+    username: ${ADMIN_USERNAME:admin}
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}

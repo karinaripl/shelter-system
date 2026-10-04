@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.shelter</groupId>
+        <artifactId>shelter</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>liquibase</artifactId>
+    <packaging>jar</packaging>
+
+    <!--
+        Модуль миграций. Применить миграции можно двумя способами:
+
+        1) В docker compose это делает сервис "migrations" автоматически:
+           приложение MigrationsApplication запускается, накатывает миграции и завершается.
+
+        2) Вручную из Maven (база из docker compose должна быть запущена):
+             mvn -pl liquibase liquibase:update
+           Другая база: -Ddb.url=... -Ddb.username=... -Ddb.password=...
+    -->
+    <properties>
+        <db.url>jdbc:postgresql://localhost:5433/shelter</db.url>
+        <db.username>shelter</db.username>
+        <db.password>shelter</db.password>
+    </properties>
+
+    <dependencies>
+        <!-- Liquibase + JDBC (HikariCP) с автоконфигурацией Spring Boot -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-liquibase</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>org.liquibase</groupId>
+                <artifactId>liquibase-maven-plugin</artifactId>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.postgresql</groupId>
+                        <artifactId>postgresql</artifactId>
+                        <version>${postgresql.version}</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <driver>org.postgresql.Driver</driver>
+                    <url>${db.url}</url>
+                    <username>${db.username}</username>
+                    <password>${db.password}</password>
+                    <changeLogFile>db/changelog/db.changelog-master.xml</changeLogFile>
+                    <searchPath>${project.basedir}/src/main/resources</searchPath>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: notification-service
+  config:
+    # Подхватываем .env из корня проекта (работает и при запуске из корня, и из папки модуля)
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
+  profiles:
+    active: local
+
+server:
+  port: 8182
+
+gateway:
+  auth:
+    secret: ${JWT_SECRET}

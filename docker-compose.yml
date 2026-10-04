@@ -1,0 +1,127 @@
+# Вся система одной командой:
+#
+#   docker compose up --build        — собрать и запустить всё (Ctrl+C — остановить)
+#   docker compose up --build -d     — то же в фоне
+#   docker compose logs -f auth-service   — логи одного сервиса
+#   docker compose down              — остановить (данные БД сохранятся)
+#   docker compose down -v           — остановить и удалить данные БД
+#
+# Режим разработки (сервисы запускаются из IDE, в Docker только база):
+#   docker compose up -d postgres migrations
+#
+# Порядок запуска: postgres (healthcheck) → migrations (накатывает миграции и завершается)
+#                  → сервисы → gateway.
+# Снаружи доступны только шлюз (8766) и база (5433). Остальные сервисы видны
+# только внутри docker-сети, поэтому пути /internal/** извне недоступны.
+
+x-java-env: &java-env
+  DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-shelter}
+  DB_USERNAME: ${DB_USERNAME:-shelter}
+  DB_PASSWORD: ${DB_PASSWORD:-shelter}
+  # Значение по умолчанию подходит только для локального запуска
+  JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-0123456789abcdef}
+  # Ограничиваем память, чтобы шесть JVM комфортно помещались в Docker Desktop
+  JAVA_TOOL_OPTIONS: -Xmx256m
+
+x-after-migrations: &after-migrations
+  migrations:
+    condition: service_completed_successfully
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: shelter-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-shelter}
+      POSTGRES_USER: ${DB_USERNAME:-shelter}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-shelter}
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - shelter-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrations:
+    build:
+      context: .
+      args:
+        MODULE: liquibase
+    image: shelter/migrations
+    environment:
+      <<: *java-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  auth-service:
+    build:
+      context: .
+      args:
+        MODULE: auth-service
+    image: shelter/auth-service
+    environment:
+      <<: *java-env
+      # Первый администратор (создаётся, если в базе ещё нет ни одного ADMIN).
+      # Значения по умолчанию подходят только для локального запуска
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@shelter.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+    depends_on: *after-migrations
+
+  room-service:
+    build:
+      context: .
+      args:
+        MODULE: room-service
+    image: shelter/room-service
+    environment:
+      <<: *java-env
+    depends_on: *after-migrations
+
+  notification-service:
+    build:
+      context: .
+      args:
+        MODULE: notification-service
+    image: shelter/notification-service
+    environment:
+      <<: *java-env
+    depends_on: *after-migrations
+
+  booking-service:
+    build:
+      context: .
+      args:
+        MODULE: booking-service
+    image: shelter/booking-service
+    environment:
+      <<: *java-env
+      ROOM_SERVICE_URL: http://room-service:8183
+      NOTIFICATION_SERVICE_URL: http://notification-service:8182
+    depends_on: *after-migrations
+
+  gateway-service:
+    build:
+      context: .
+      args:
+        MODULE: gateway-service
+    image: shelter/gateway-service
+    environment:
+      <<: *java-env
+      AUTH_SERVICE_URL: http://auth-service:8180
+      BOOKING_SERVICE_URL: http://booking-service:8181
+      NOTIFICATION_SERVICE_URL: http://notification-service:8182
+      ROOM_SERVICE_URL: http://room-service:8183
+    ports:
+      - "8766:8766"
+    depends_on:
+      - auth-service
+      - room-service
+      - notification-service
+      - booking-service
+
+volumes:
+  shelter-pgdata:

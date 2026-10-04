@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: migrations
+  config:
+    # Подхватываем .env из корня проекта при запуске вне Docker
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
+  main:
+    # Веб-сервер не нужен: приложение только накатывает миграции и завершается
+    web-application-type: none
+    banner-mode: off
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/shelter}
+    username: ${DB_USERNAME:shelter}
+    password: ${DB_PASSWORD:shelter}
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml

@@ -1,0 +1,22 @@
+# Shelter System — руководство разработчика
+
+ВКР «Информационная система управления приютом для животных».
+
+- Стек: Java 21, Spring Boot 4.1, Spring Cloud Gateway, OpenFeign, Spring Security + JWT (HS256, BCrypt), PostgreSQL 17, Liquibase, jOOQ, Docker Compose. Клиентская часть позже: React + TypeScript.
+- Пакеты `com.shelter.*`. Клиенты обращаются только через шлюз (`localhost:8766`), `/internal/**` — только для вызовов между сервисами. Внутренние сервисы доверяют заголовкам шлюза через `gateway-auth-starter`.
+- Запуск: `docker compose up --build`. БД на `localhost:5433`. Миграции — модуль `liquibase` (контейнер `migrations`).
+- jOOQ-классы хранятся в git; после изменения миграций: `docker compose up -d --build postgres migrations`, затем `mvn -pl model -Pjooq-codegen generate-sources`.
+- Слои в сервисах: controller → service → repository (jOOQ) + mapper + dto (record) + exception + GlobalExceptionHandler.
+- Предметная модель взята из прототипа на C# (github.com/karinaripl/shelter, `db_create.sql`, 27 таблиц).
+- Порядок работы: после каждого изменения собрать проект (`mvn -DskipTests package`), запустить тесты и проверить через docker compose. Порты и структуру модулей не менять без согласования.
+- План:
+  1. авторизация и роли
+  2. схема БД приюта
+  3. shelter-core-service (животные, клетки, статусы)
+  4. медицина
+  5. склад
+  6. волонтёры, мероприятия, финансы
+  7. визиты и заявки (booking-service)
+  8. уведомления
+  9. тесты, OpenAPI
+  10. клиентская часть

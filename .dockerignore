@@ -1,0 +1,13 @@
+# Не отправляем в Docker то, что не нужно для сборки
+**/target/
+.git/
+.idea/
+.vscode/
+*.iml
+.env
+**/local.properties
+**/application-local.yaml
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md

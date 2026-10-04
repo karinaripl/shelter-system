@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="auth-V1" author="olga">
+        <sqlFile path="db/changelog/auth/V1__create_users_table.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/auth/V1__create_users_table_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="auth-V2" author="olga">
+        <sqlFile path="db/changelog/auth/V2__add_user_role.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/auth/V2__add_user_role_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="auth-V3" author="olga">
+        <sqlFile path="db/changelog/auth/V3__user_roles.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/auth/V3__user_roles_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
