@@ -26,4 +26,12 @@
         </rollback>
     </changeSet>
 
+    <!-- Только для демонстрации: учётные записи демо-сотрудников -->
+    <changeSet id="auth-V4-demo" author="olga" context="demo">
+        <sqlFile path="db/changelog/auth/V4__demo_users.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/auth/V4__demo_users_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

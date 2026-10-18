@@ -1,0 +1,450 @@
+{
+  "info": {
+    "name": "Shelter — шаг 3: животные, клетки, фото, каталог, матрица доступа",
+    "description": "Сквозной сценарий шага 3 с автотестами: админ заводит сотрудников → куратор создаёт клетки, регистрирует животное, загружает фото, переводит, делает готовым к пристройству → животное видно в публичном каталоге без токена → выбытие → животное исчезло из каталога, клетка освободилась.\nПлюс проверки матрицы доступа (docs/access.md) и бизнес-правил.\nФайлы для загрузки лежат в docs/postman/files: в Postman укажите рабочую папку docs/postman (Settings → Working directory) или выберите файлы заново в запросах загрузки.\nПовторный запуск возможен: email и номера клеток уникальны для каждого прогона.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8766" },
+    { "key": "adminEmail", "value": "admin@shelter.local" },
+    { "key": "adminPassword", "value": "admin12345" }
+  ],
+  "item": [
+    {
+      "name": "Подготовка",
+      "item": [
+        {
+          "name": "Вход администратора",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "// Новый суффикс на каждый прогон и даты относительно сегодняшнего дня (UTC, как на сервере)",
+              "const run = Date.now().toString(36);",
+              "pm.collectionVariables.set('run', run);",
+              "pm.collectionVariables.set('cageA', ('A' + run).slice(-10).toUpperCase());",
+              "pm.collectionVariables.set('cageB', ('B' + run).slice(-10).toUpperCase());",
+              "const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);",
+              "pm.collectionVariables.set('today', day(0));",
+              "pm.collectionVariables.set('arrivalDate', day(-10));",
+              "pm.collectionVariables.set('beforeArrival', day(-20));"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('adminToken', pm.response.json().token);"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{adminEmail}}\",\"password\":\"{{adminPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "ADMIN создаёт куратора",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201, роль CURATOR', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().roles).to.eql(['CURATOR']); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"username\":\"curator-{{run}}\",\"email\":\"curator-{{run}}@test.local\",\"password\":\"password1\",\"roles\":[\"CURATOR\"]}" },
+            "url": "{{baseUrl}}/admin/users"
+          }
+        },
+        {
+          "name": "ADMIN создаёт ветеринара",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201, роль VET', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().roles).to.eql(['VET']); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"username\":\"vet-{{run}}\",\"email\":\"vet-{{run}}@test.local\",\"password\":\"password1\",\"roles\":[\"VET\"]}" },
+            "url": "{{baseUrl}}/admin/users"
+          }
+        },
+        {
+          "name": "ADMIN создаёт координатора",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201, роль COORDINATOR', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().roles).to.eql(['COORDINATOR']); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"username\":\"coord-{{run}}\",\"email\":\"coord-{{run}}@test.local\",\"password\":\"password1\",\"roles\":[\"COORDINATOR\"]}" },
+            "url": "{{baseUrl}}/admin/users"
+          }
+        },
+        {
+          "name": "Регистрация посетителя",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('visitorToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"username\":\"visitor-{{run}}\",\"email\":\"visitor-{{run}}@test.local\",\"password\":\"password1\"}" },
+            "url": "{{baseUrl}}/auth/register"
+          }
+        },
+        {
+          "name": "Вход куратора",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('curatorToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"curator-{{run}}@test.local\",\"password\":\"password1\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Вход ветеринара",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('vetToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"vet-{{run}}@test.local\",\"password\":\"password1\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Вход координатора",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('coordinatorToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"coord-{{run}}@test.local\",\"password\":\"password1\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Матрица доступа",
+      "item": [
+        {
+          "name": "ADMIN → GET /admin/employees → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('сотрудники с должностями', () => { const list = pm.response.json(); pm.expect(list).to.be.an('array'); list.forEach(e => pm.expect(e).to.have.property('positionName')); });"
+          ] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/admin/employees" }
+        },
+        {
+          "name": "CURATOR → GET /admin/employees → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));",
+            "pm.test('общий формат ошибки', () => { const b = pm.response.json(); pm.expect(b.message).to.eql('Недостаточно прав для этого действия'); pm.expect(b.path).to.eql('/admin/employees'); });"
+          ] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }], "url": "{{baseUrl}}/admin/employees" }
+        },
+        {
+          "name": "VET → GET /admin/employees → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }], "url": "{{baseUrl}}/admin/employees" }
+        },
+        {
+          "name": "COORDINATOR → GET /admin/employees → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }], "url": "{{baseUrl}}/admin/employees" }
+        },
+        {
+          "name": "VISITOR → GET /admin/employees → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{visitorToken}}" }], "url": "{{baseUrl}}/admin/employees" }
+        },
+        {
+          "name": "Без токена → GET /admin/employees → 401",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));",
+            "pm.test('сообщение на русском', () => pm.expect(pm.response.json().message).to.eql('Требуется авторизация'));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/admin/employees" }
+        },
+        {
+          "name": "COORDINATOR создаёт пользователя → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"username\":\"hack-{{run}}\",\"email\":\"hack-{{run}}@test.local\",\"password\":\"password1\",\"roles\":[\"ADMIN\"]}" },
+            "url": "{{baseUrl}}/admin/users"
+          }
+        },
+        {
+          "name": "VISITOR → GET /animals (только сотрудники) → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{visitorToken}}" }], "url": "{{baseUrl}}/animals" }
+        }
+      ]
+    },
+    {
+      "name": "Сценарий: от поступления до выбытия",
+      "item": [
+        {
+          "name": "Куратор: источники поступления для формы",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, есть STREET', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().map(s => s.code)).to.include('STREET'); });"
+          ] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }], "url": "{{baseUrl}}/arrival-sources" }
+        },
+        {
+          "name": "Куратор создаёт клетку A (вместимость 1)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201, пустая', () => { pm.response.to.have.status(201); const c = pm.response.json(); pm.expect(c.occupied).to.eql(0); pm.expect(c.free).to.eql(1); });",
+            "pm.collectionVariables.set('cageAId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"number\":\"{{cageA}}\",\"capacity\":1,\"cageType\":\"Карантин\"}" },
+            "url": "{{baseUrl}}/cages"
+          }
+        },
+        {
+          "name": "Куратор создаёт клетку B (вместимость 2)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('cageBId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"number\":\"{{cageB}}\",\"capacity\":2,\"cageType\":\"Средняя\"}" },
+            "url": "{{baseUrl}}/cages"
+          }
+        },
+        {
+          "name": "Куратор регистрирует поступление в клетку A",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const a = pm.response.json();",
+            "pm.test('в приюте, в клетке A, здоров', () => { pm.expect(a.status.code).to.eql('IN_SHELTER'); pm.expect(a.cage.number).to.eql(pm.collectionVariables.get('cageA')); pm.expect(a.healthState).to.eql('HEALTHY'); });",
+            "pm.collectionVariables.set('animalId', a.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Тест-{{run}}\",\"gender\":\"M\",\"color\":\"рыжий\",\"character\":\"Ласковый\",\"specialMarks\":\"Белое пятно на груди\",\"arrivalDate\":\"{{arrivalDate}}\",\"arrivalSourceCode\":\"STREET\",\"cageId\":{{cageAId}}}" },
+            "url": "{{baseUrl}}/animals"
+          }
+        },
+        {
+          "name": "Негатив: второе животное в заполненную клетку A → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('заполнена'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Лишний\",\"arrivalSourceCode\":\"STREET\",\"cageId\":{{cageAId}}}" },
+            "url": "{{baseUrl}}/animals"
+          }
+        },
+        {
+          "name": "Координатор создаёт животное → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Не положено\",\"arrivalSourceCode\":\"STREET\",\"cageId\":{{cageBId}}}" },
+            "url": "{{baseUrl}}/animals"
+          }
+        },
+        {
+          "name": "Куратор загружает фото",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.test('первое фото — главное', () => pm.expect(pm.response.json().main).to.eql(true));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "files/cat.png" }] },
+            "url": "{{baseUrl}}/animals/{{animalId}}/photos"
+          }
+        },
+        {
+          "name": "Негатив: файл не-картинка (текст с расширением .png) → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('JPG и PNG'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "files/not-an-image.png" }] },
+            "url": "{{baseUrl}}/animals/{{animalId}}/photos"
+          }
+        },
+        {
+          "name": "Куратор переводит животное в клетку B",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, клетка B', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().cage.number).to.eql(pm.collectionVariables.get('cageB')); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"cageId\":{{cageBId}}}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/cage"
+          }
+        },
+        {
+          "name": "Клетка A освободилась",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('занято 0, животных нет', () => { pm.response.to.have.status(200); const c = pm.response.json(); pm.expect(c.occupied).to.eql(0); pm.expect(c.animals).to.be.empty; });"
+          ] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }], "url": "{{baseUrl}}/cages/{{cageAId}}" }
+        },
+        {
+          "name": "Негатив: недопустимый переход «в приюте» → «забронирован» → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('недопустим'));"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"status\":\"RESERVED\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/status"
+          }
+        },
+        {
+          "name": "Ветеринар ставит «на лечении» → разрешено",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, TREATMENT', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().healthState).to.eql('TREATMENT'); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"healthState\":\"TREATMENT\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/health-state"
+          }
+        },
+        {
+          "name": "Ветеринар меняет кличку → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Другая кличка\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}"
+          }
+        },
+        {
+          "name": "Куратор: статус «готов к пристройству»",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, AVAILABLE', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().status.code).to.eql('AVAILABLE'); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"status\":\"AVAILABLE\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/status"
+          }
+        },
+        {
+          "name": "Публичный каталог без токена: животное есть, с фото",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const item = pm.response.json().content.find(a => a.id === pm.collectionVariables.get('animalId'));",
+            "pm.test('животное в каталоге', () => pm.expect(item).to.be.an('object'));",
+            "pm.test('есть главное фото', () => pm.expect(item.mainPhotoUrl).to.match(/^\\/public\\/photos\\/\\d+$/));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/public/animals?size=100" }
+        },
+        {
+          "name": "Публичная карточка без токена: без внутренних полей",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const a = pm.response.json();",
+            "pm.test('нет клетки, источника и заметок', () => { pm.expect(a).to.not.have.any.keys('cage', 'cageId', 'arrivalSource', 'departureNote', 'healthState'); });",
+            "pm.test('одно фото, кличка и приметы', () => { pm.expect(a.photoUrls).to.have.lengthOf(1); pm.expect(a.specialMarks).to.eql('Белое пятно на груди'); });",
+            "pm.collectionVariables.set('publicPhotoUrl', a.mainPhotoUrl);"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/public/animals/{{animalId}}" }
+        },
+        {
+          "name": "Фото из каталога без токена",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, image/png', () => { pm.response.to.have.status(200); pm.expect(pm.response.headers.get('Content-Type')).to.include('image/png'); });"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}{{publicPhotoUrl}}" }
+        },
+        {
+          "name": "Негатив: дата выбытия раньше поступления → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('раньше даты поступления'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"departureDate\":\"{{beforeArrival}}\",\"status\":\"ADOPTED\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/departure"
+          }
+        },
+        {
+          "name": "Куратор оформляет выбытие «пристроен»",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const a = pm.response.json();",
+            "pm.test('пристроен, без клетки, с датой', () => { pm.expect(a.status.code).to.eql('ADOPTED'); pm.expect(a.cage).to.eql(null); pm.expect(a.departureDate).to.eql(pm.collectionVariables.get('today')); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"departureDate\":\"{{today}}\",\"status\":\"ADOPTED\",\"note\":\"Пристроен в семью\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/departure"
+          }
+        },
+        {
+          "name": "Животное исчезло из каталога",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', () => pm.response.to.have.status(404));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/public/animals/{{animalId}}" }
+        },
+        {
+          "name": "Его фото больше не отдаётся публично",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', () => pm.response.to.have.status(404));"
+          ] } }],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}{{publicPhotoUrl}}" }
+        },
+        {
+          "name": "Клетка B освободилась",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('занято 0', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().occupied).to.eql(0); });"
+          ] } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }], "url": "{{baseUrl}}/cages/{{cageBId}}" }
+        }
+      ]
+    }
+  ]
+}

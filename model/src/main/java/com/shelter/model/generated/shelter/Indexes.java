@@ -5,6 +5,7 @@ package com.shelter.model.generated.shelter;
 
 
 import com.shelter.model.generated.shelter.tables.Animal;
+import com.shelter.model.generated.shelter.tables.AnimalPhoto;
 import com.shelter.model.generated.shelter.tables.BatchStock;
 import com.shelter.model.generated.shelter.tables.Donation;
 import com.shelter.model.generated.shelter.tables.Employee;
@@ -66,6 +67,7 @@ public class Indexes {
     public static final Index IDX_MEDICAL_RECORD_CARD_DATE = Internal.createIndex(DSL.name("idx_medical_record_card_date"), MedicalRecord.MEDICAL_RECORD, new OrderField[] { MedicalRecord.MEDICAL_RECORD.MEDICAL_CARD_ID, MedicalRecord.MEDICAL_RECORD.RECORD_DATE }, false);
     public static final Index IDX_MEDICAL_RECORD_EMPLOYEE = Internal.createIndex(DSL.name("idx_medical_record_employee"), MedicalRecord.MEDICAL_RECORD, new OrderField[] { MedicalRecord.MEDICAL_RECORD.EMPLOYEE_ID }, false);
     public static final Index IDX_PARTICIPATION_ANIMAL = Internal.createIndex(DSL.name("idx_participation_animal"), EventParticipation.EVENT_PARTICIPATION, new OrderField[] { EventParticipation.EVENT_PARTICIPATION.ANIMAL_ID }, false);
+    public static final Index IDX_PHOTO_ANIMAL = Internal.createIndex(DSL.name("idx_photo_animal"), AnimalPhoto.ANIMAL_PHOTO, new OrderField[] { AnimalPhoto.ANIMAL_PHOTO.ANIMAL_ID, AnimalPhoto.ANIMAL_PHOTO.SORT_ORDER }, false);
     public static final Index IDX_PROCEDURE_CARD_DATE = Internal.createIndex(DSL.name("idx_procedure_card_date"), ProcedureRecord.PROCEDURE_RECORD, new OrderField[] { ProcedureRecord.PROCEDURE_RECORD.MEDICAL_CARD_ID, ProcedureRecord.PROCEDURE_RECORD.PROCEDURE_DATE }, false);
     public static final Index IDX_PROCEDURE_EMPLOYEE = Internal.createIndex(DSL.name("idx_procedure_employee"), ProcedureRecord.PROCEDURE_RECORD, new OrderField[] { ProcedureRecord.PROCEDURE_RECORD.EMPLOYEE_ID }, false);
     public static final Index IDX_PROCEDURE_TYPE = Internal.createIndex(DSL.name("idx_procedure_type"), ProcedureRecord.PROCEDURE_RECORD, new OrderField[] { ProcedureRecord.PROCEDURE_RECORD.PROCEDURE_TYPE_ID }, false);
@@ -82,4 +84,5 @@ public class Indexes {
     public static final Index IDX_WRITE_OFF_STOCK = Internal.createIndex(DSL.name("idx_write_off_stock"), ProductWriteOff.PRODUCT_WRITE_OFF, new OrderField[] { ProductWriteOff.PRODUCT_WRITE_OFF.BATCH_ID, ProductWriteOff.PRODUCT_WRITE_OFF.WAREHOUSE_ID }, false);
     public static final Index IDX_WRITE_OFF_WAREHOUSE = Internal.createIndex(DSL.name("idx_write_off_warehouse"), ProductWriteOff.PRODUCT_WRITE_OFF, new OrderField[] { ProductWriteOff.PRODUCT_WRITE_OFF.WAREHOUSE_ID }, false);
     public static final Index UQ_ASSIGNMENT_ACTIVE = Internal.createIndex(DSL.name("uq_assignment_active"), VolunteerAssignment.VOLUNTEER_ASSIGNMENT, new OrderField[] { VolunteerAssignment.VOLUNTEER_ASSIGNMENT.VOLUNTEER_ID, VolunteerAssignment.VOLUNTEER_ASSIGNMENT.ANIMAL_ID }, true);
+    public static final Index UQ_PHOTO_MAIN = Internal.createIndex(DSL.name("uq_photo_main"), AnimalPhoto.ANIMAL_PHOTO, new OrderField[] { AnimalPhoto.ANIMAL_PHOTO.ANIMAL_ID }, true);
 }

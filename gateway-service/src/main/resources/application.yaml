@@ -11,10 +11,15 @@ spring:
           # Публичные маршруты. Пути /internal/** сюда намеренно не попадают:
           # они предназначены только для вызовов между сервисами.
           routes:
+            # Админ-панель (/admin/**) разнесена по сервисам; шлюз пропускает её только с ролью ADMIN
             - id: auth-service
               uri: ${AUTH_SERVICE_URL:http://localhost:8180}
               predicates:
-                - Path=/auth/**
+                - Path=/auth/**,/admin/users/**,/admin/roles/**
+            - id: shelter-core-service
+              uri: ${SHELTER_CORE_SERVICE_URL:http://localhost:8184}
+              predicates:
+                - Path=/animals/**,/cages/**,/animal-statuses/**,/arrival-sources/**,/public/**,/admin/employees/**
             - id: booking-service
               uri: ${BOOKING_SERVICE_URL:http://localhost:8181}
               predicates:

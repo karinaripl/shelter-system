@@ -1,0 +1,278 @@
+{
+  "info": {
+    "name": "Shelter — шаг 1: авторизация и роли",
+    "description": "Регистрация, вход, профиль, смена пароля и управление учётными записями (/admin/users — только ADMIN).\nЗапуск: docker compose up --build, затем коллекция целиком (Run). Повторный запуск возможен: email уникальны для каждого прогона.\nПрава доступа — docs/access.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8766" },
+    { "key": "adminEmail", "value": "admin@shelter.local" },
+    { "key": "adminPassword", "value": "admin12345" }
+  ],
+  "item": [
+    {
+      "name": "1. Вход администратора",
+      "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+        "// Новый суффикс на каждый прогон: email не повторяются при повторных запусках",
+        "pm.collectionVariables.set('run', Date.now().toString(36));"
+      ] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200 и токен', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().token).to.be.a('string'); });",
+        "pm.collectionVariables.set('adminToken', pm.response.json().token);"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{adminEmail}}\",\"password\":\"{{adminPassword}}\"}" },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "2. Профиль администратора",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200, роль ADMIN', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().roles).to.include('ADMIN'); });",
+        "pm.collectionVariables.set('adminId', pm.response.json().id);"
+      ] } }],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/auth/me"
+      }
+    },
+    {
+      "name": "3. Регистрация посетителя (попытка указать ADMIN игнорируется)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('201 и токен', () => { pm.response.to.have.status(201); });",
+        "pm.collectionVariables.set('visitorToken', pm.response.json().token);"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"username\":\"guest-{{run}}\",\"email\":\"guest-{{run}}@test.local\",\"password\":\"password1\",\"roles\":[\"ADMIN\"]}" },
+        "url": "{{baseUrl}}/auth/register"
+      }
+    },
+    {
+      "name": "4. Профиль посетителя: только VISITOR",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "pm.test('роли = [VISITOR]', () => pm.expect(pm.response.json().roles).to.eql(['VISITOR']));"
+      ] } }],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{visitorToken}}" }],
+        "url": "{{baseUrl}}/auth/me"
+      }
+    },
+    {
+      "name": "5. Повторный email → 409",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('409', () => pm.response.to.have.status(409));",
+        "pm.test('общий формат ошибки', () => { const b = pm.response.json(); pm.expect(b).to.have.keys('timestamp','status','error','message','path'); pm.expect(b.path).to.eql('/auth/register'); });"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"username\":\"guest2-{{run}}\",\"email\":\"guest-{{run}}@test.local\",\"password\":\"password1\"}" },
+        "url": "{{baseUrl}}/auth/register"
+      }
+    },
+    {
+      "name": "6. Ошибки валидации → 400",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('400 с понятным сообщением', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().message).to.include('Некорректный email'); });"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"username\":\"x\",\"email\":\"not-an-email\",\"password\":\"123\"}" },
+        "url": "{{baseUrl}}/auth/register"
+      }
+    },
+    {
+      "name": "7. Неверный пароль → 401",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('401, одинаковое сообщение', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().message).to.eql('Неверный email или пароль'); });"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"email\":\"guest-{{run}}@test.local\",\"password\":\"wrong-pass\"}" },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "8. ADMIN создаёт сотрудника с ролями VET + CURATOR (/admin/users)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('201', () => pm.response.to.have.status(201));",
+        "pm.test('обе роли', () => pm.expect(pm.response.json().roles).to.eql(['VET','CURATOR']));",
+        "pm.collectionVariables.set('staffId', pm.response.json().id);"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "body": { "mode": "raw", "raw": "{\"username\":\"staff-{{run}}\",\"email\":\"staff-{{run}}@test.local\",\"password\":\"password1\",\"roles\":[\"VET\",\"CURATOR\"]}" },
+        "url": "{{baseUrl}}/admin/users"
+      }
+    },
+    {
+      "name": "9. Создать без ролей → 400",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('400', () => pm.response.to.have.status(400));"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "body": { "mode": "raw", "raw": "{\"username\":\"empty-{{run}}\",\"email\":\"empty-{{run}}@test.local\",\"password\":\"password1\",\"roles\":[]}" },
+        "url": "{{baseUrl}}/admin/users"
+      }
+    },
+    {
+      "name": "10. Список пользователей и ролей (ADMIN)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "pm.test('новый сотрудник в списке', () => pm.expect(pm.response.json().map(u => u.id)).to.include(pm.collectionVariables.get('staffId')));"
+      ] } }],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/admin/users"
+      }
+    },
+    {
+      "name": "11. Справочник ролей (ADMIN)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('6 ролей', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().map(r => r.name)).to.eql(['ADMIN','VET','CURATOR','ADOPTION_MANAGER','COORDINATOR','VISITOR']); });"
+      ] } }],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/admin/roles"
+      }
+    },
+    {
+      "name": "12. Посетитель → /admin/users → 403",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('403', () => pm.response.to.have.status(403));"
+      ] } }],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{visitorToken}}" }],
+        "url": "{{baseUrl}}/admin/users"
+      }
+    },
+    {
+      "name": "13. Без токена → /admin/users → 401",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('401', () => pm.response.to.have.status(401));"
+      ] } }],
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/admin/users" }
+    },
+    {
+      "name": "14. Старый путь /auth/users больше не существует",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('404', () => pm.response.to.have.status(404));"
+      ] } }],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/auth/users"
+      }
+    },
+    {
+      "name": "15. Оставить сотруднику только VET",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200, роли = [VET]', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().roles).to.eql(['VET']); });"
+      ] } }],
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "body": { "mode": "raw", "raw": "{\"roles\":[\"VET\"]}" },
+        "url": "{{baseUrl}}/admin/users/{{staffId}}/roles"
+      }
+    },
+    {
+      "name": "16. Снять ADMIN с себя → 409",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('409', () => pm.response.to.have.status(409));"
+      ] } }],
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "body": { "mode": "raw", "raw": "{\"roles\":[\"VET\"]}" },
+        "url": "{{baseUrl}}/admin/users/{{adminId}}/roles"
+      }
+    },
+    {
+      "name": "17. Заблокировать сотрудника",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200, enabled=false', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().enabled).to.eql(false); });"
+      ] } }],
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "body": { "mode": "raw", "raw": "{\"enabled\":false}" },
+        "url": "{{baseUrl}}/admin/users/{{staffId}}/status"
+      }
+    },
+    {
+      "name": "18. Вход заблокированного → 403",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('403', () => pm.response.to.have.status(403));"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"email\":\"staff-{{run}}@test.local\",\"password\":\"password1\"}" },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "19. Разблокировать",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200, enabled=true', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().enabled).to.eql(true); });"
+      ] } }],
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "body": { "mode": "raw", "raw": "{\"enabled\":true}" },
+        "url": "{{baseUrl}}/admin/users/{{staffId}}/status"
+      }
+    },
+    {
+      "name": "20. Смена пароля с неверным текущим → 400",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('400', () => pm.response.to.have.status(400));"
+      ] } }],
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{visitorToken}}" }],
+        "body": { "mode": "raw", "raw": "{\"currentPassword\":\"wrong-pass\",\"newPassword\":\"password2\"}" },
+        "url": "{{baseUrl}}/auth/me/password"
+      }
+    },
+    {
+      "name": "21. Смена пароля",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('204', () => pm.response.to.have.status(204));"
+      ] } }],
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{visitorToken}}" }],
+        "body": { "mode": "raw", "raw": "{\"currentPassword\":\"password1\",\"newPassword\":\"password2\"}" },
+        "url": "{{baseUrl}}/auth/me/password"
+      }
+    },
+    {
+      "name": "22. Вход с новым паролем",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"email\":\"guest-{{run}}@test.local\",\"password\":\"password2\"}" },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    }
+  ]
+}

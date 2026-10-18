@@ -1,6 +1,8 @@
 package com.shelter.gatewayauth.filter;
 
 import com.shelter.gatewayauth.config.GatewayAuthProperties;
+import com.shelter.gatewayauth.error.SecurityErrorWriter;
+import org.springframework.http.HttpStatus;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -53,9 +55,16 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
             return;
         }
 
+        if (noUserHeaders) {
+            // Запрос без данных о пользователе — не авторизован
+            SecurityErrorWriter.write(request, response, HttpStatus.UNAUTHORIZED,
+                    SecurityErrorWriter.UNAUTHORIZED_MESSAGE);
+            return;
+        }
+
         if (isBlank(userEmail) || isBlank(userRoles) || isBlank(userId) || isBlank(signature)) {
-            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-            response.getWriter().write("Access denied: request must go through gateway");
+            SecurityErrorWriter.write(request, response, HttpStatus.FORBIDDEN,
+                    SecurityErrorWriter.NOT_FROM_GATEWAY_MESSAGE);
             return;
         }
 
@@ -63,8 +72,8 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
         if (!MessageDigest.isEqual(
                 expectedSignature.getBytes(StandardCharsets.UTF_8),
                 signature.getBytes(StandardCharsets.UTF_8))) {
-            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-            response.getWriter().write("Access denied: invalid gateway signature");
+            SecurityErrorWriter.write(request, response, HttpStatus.FORBIDDEN,
+                    SecurityErrorWriter.NOT_FROM_GATEWAY_MESSAGE);
             return;
         }
 
@@ -94,7 +103,7 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
      * Подпись считается по строке "userId:roles:email" — той же, что и в шлюзе.
      * Email стоит последним: только он может содержать двоеточие.
      */
-    static String computeSignature(String userId, String roles, String email, String secret) {
+    public static String computeSignature(String userId, String roles, String email, String secret) {
         try {
             String data = userId + ":" + roles + ":" + email;
             Mac mac = Mac.getInstance("HmacSHA256");

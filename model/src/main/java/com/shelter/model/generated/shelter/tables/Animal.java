@@ -7,6 +7,7 @@ package com.shelter.model.generated.shelter.tables;
 import com.shelter.model.generated.shelter.Indexes;
 import com.shelter.model.generated.shelter.Keys;
 import com.shelter.model.generated.shelter.ShelterSchema;
+import com.shelter.model.generated.shelter.tables.AnimalPhoto.AnimalPhotoPath;
 import com.shelter.model.generated.shelter.tables.AnimalStatus.AnimalStatusPath;
 import com.shelter.model.generated.shelter.tables.ArrivalSource.ArrivalSourcePath;
 import com.shelter.model.generated.shelter.tables.Cage.CagePath;
@@ -150,6 +151,11 @@ public class Animal extends TableImpl<AnimalRecord> {
      */
     public final TableField<AnimalRecord, OffsetDateTime> UPDATED_AT = createField(DSL.name("updated_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false).defaultValue(DSL.field(DSL.raw("now()"), SQLDataType.TIMESTAMPWITHTIMEZONE)), this, "");
 
+    /**
+     * The column <code>shelter_schema.animal.health_state</code>.
+     */
+    public final TableField<AnimalRecord, String> HEALTH_STATE = createField(DSL.name("health_state"), SQLDataType.VARCHAR(20).nullable(false).defaultValue(DSL.field(DSL.raw("'HEALTHY'::character varying"), SQLDataType.VARCHAR)), this, "");
+
     private Animal(Name alias, Table<AnimalRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
     }
@@ -275,6 +281,19 @@ public class Animal extends TableImpl<AnimalRecord> {
         return _animalStatus;
     }
 
+    private transient AnimalPhotoPath _animalPhoto;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>shelter_schema.animal_photo</code> table
+     */
+    public AnimalPhotoPath animalPhoto() {
+        if (_animalPhoto == null)
+            _animalPhoto = new AnimalPhotoPath(this, null, Keys.ANIMAL_PHOTO__ANIMAL_PHOTO_ANIMAL_ID_FKEY.getInverseKey());
+
+        return _animalPhoto;
+    }
+
     private transient EventParticipationPath _eventParticipation;
 
     /**
@@ -342,7 +361,8 @@ public class Animal extends TableImpl<AnimalRecord> {
             Internal.createCheck(this, DSL.name("chk_animal_birth_before_arrival"), "(((birth_date IS NULL) OR (birth_date <= arrival_date)))", true),
             Internal.createCheck(this, DSL.name("chk_animal_departed_no_cage"), "(((departure_date IS NULL) OR (cage_id IS NULL)))", true),
             Internal.createCheck(this, DSL.name("chk_animal_departure_after_arrival"), "(((departure_date IS NULL) OR (departure_date >= arrival_date)))", true),
-            Internal.createCheck(this, DSL.name("chk_animal_departure_note"), "(((departure_note IS NULL) OR (departure_date IS NOT NULL)))", true)
+            Internal.createCheck(this, DSL.name("chk_animal_departure_note"), "(((departure_note IS NULL) OR (departure_date IS NOT NULL)))", true),
+            Internal.createCheck(this, DSL.name("chk_animal_health_state"), "(((health_state)::text = ANY ((ARRAY['HEALTHY'::character varying, 'QUARANTINE'::character varying, 'TREATMENT'::character varying])::text[])))", true)
         );
     }
 

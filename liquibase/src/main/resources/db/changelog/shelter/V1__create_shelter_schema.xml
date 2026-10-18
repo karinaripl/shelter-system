@@ -80,4 +80,28 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="shelter-V10" author="olga">
+        <comment>Медицинское состояние животного, хронические болезни, статусы AVAILABLE и RESERVED</comment>
+        <sqlFile path="db/changelog/shelter/V10__health_state_and_statuses.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V10__health_state_and_statuses_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="shelter-V11" author="olga">
+        <comment>Фотографии животных</comment>
+        <sqlFile path="db/changelog/shelter/V11__animal_photo.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V11__animal_photo_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="shelter-V12-demo" author="olga" context="demo">
+        <comment>Демо-данные шага 3: связь сотрудников с учётными записями, статусы, состояние здоровья, фото</comment>
+        <sqlFile path="db/changelog/shelter/V12__demo_access_and_photos.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V12__demo_access_and_photos_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

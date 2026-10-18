@@ -9,6 +9,8 @@
 - Слои в сервисах: controller → service → repository (jOOQ) + mapper + dto (record) + exception + GlobalExceptionHandler.
 - Предметная модель взята из прототипа на C# (github.com/karinaripl/shelter, `db_create.sql`, 27 таблиц).
 - Порядок работы: после каждого изменения собрать проект (`mvn -DskipTests package`), запустить тесты и проверить через docker compose. Порты и структуру модулей не менять без согласования.
+- Права доступа: docs/access.md — единый источник правил (роли, матрица, этапы жизненного цикла). Схема БД: docs/database.md.
+- Выполнено: шаги 1–3 (шаг 3 — shelter-core-service, порт 8184: животные, клетки, фото, публичный каталог, /admin/employees).
 - План:
   1. авторизация и роли
   2. схема БД приюта

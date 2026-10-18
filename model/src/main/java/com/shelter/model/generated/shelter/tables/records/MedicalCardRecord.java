@@ -147,6 +147,20 @@ public class MedicalCardRecord extends UpdatableRecordImpl<MedicalCardRecord> {
         return (OffsetDateTime) get(8);
     }
 
+    /**
+     * Setter for <code>shelter_schema.medical_card.chronic_conditions</code>.
+     */
+    public void setChronicConditions(String value) {
+        set(9, value);
+    }
+
+    /**
+     * Getter for <code>shelter_schema.medical_card.chronic_conditions</code>.
+     */
+    public String getChronicConditions() {
+        return (String) get(9);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -170,7 +184,7 @@ public class MedicalCardRecord extends UpdatableRecordImpl<MedicalCardRecord> {
     /**
      * Create a detached, initialised MedicalCardRecord
      */
-    public MedicalCardRecord(Long id, Long animalId, LocalDate openedOn, Boolean isSterilized, Boolean isVaccinated, Boolean isParasiteTreated, String notes, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+    public MedicalCardRecord(Long id, Long animalId, LocalDate openedOn, Boolean isSterilized, Boolean isVaccinated, Boolean isParasiteTreated, String notes, OffsetDateTime createdAt, OffsetDateTime updatedAt, String chronicConditions) {
         super(MedicalCard.MEDICAL_CARD);
 
         setId(id);
@@ -182,6 +196,7 @@ public class MedicalCardRecord extends UpdatableRecordImpl<MedicalCardRecord> {
         setNotes(notes);
         setCreatedAt(createdAt);
         setUpdatedAt(updatedAt);
+        setChronicConditions(chronicConditions);
         resetTouchedOnNotNull();
     }
 }

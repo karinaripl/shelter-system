@@ -5,6 +5,7 @@ package com.shelter.model.generated.shelter;
 
 
 import com.shelter.model.generated.shelter.tables.Animal;
+import com.shelter.model.generated.shelter.tables.AnimalPhoto;
 import com.shelter.model.generated.shelter.tables.AnimalStatus;
 import com.shelter.model.generated.shelter.tables.ArrivalSource;
 import com.shelter.model.generated.shelter.tables.BatchStock;
@@ -32,6 +33,7 @@ import com.shelter.model.generated.shelter.tables.Supply;
 import com.shelter.model.generated.shelter.tables.Volunteer;
 import com.shelter.model.generated.shelter.tables.VolunteerAssignment;
 import com.shelter.model.generated.shelter.tables.Warehouse;
+import com.shelter.model.generated.shelter.tables.records.AnimalPhotoRecord;
 import com.shelter.model.generated.shelter.tables.records.AnimalRecord;
 import com.shelter.model.generated.shelter.tables.records.AnimalStatusRecord;
 import com.shelter.model.generated.shelter.tables.records.ArrivalSourceRecord;
@@ -81,6 +83,8 @@ public class Keys {
     // -------------------------------------------------------------------------
 
     public static final UniqueKey<AnimalRecord> ANIMAL_PKEY = Internal.createUniqueKey(Animal.ANIMAL, DSL.name("animal_pkey"), new TableField[] { Animal.ANIMAL.ID }, true);
+    public static final UniqueKey<AnimalPhotoRecord> ANIMAL_PHOTO_FILE_PATH_KEY = Internal.createUniqueKey(AnimalPhoto.ANIMAL_PHOTO, DSL.name("animal_photo_file_path_key"), new TableField[] { AnimalPhoto.ANIMAL_PHOTO.FILE_PATH }, true);
+    public static final UniqueKey<AnimalPhotoRecord> ANIMAL_PHOTO_PKEY = Internal.createUniqueKey(AnimalPhoto.ANIMAL_PHOTO, DSL.name("animal_photo_pkey"), new TableField[] { AnimalPhoto.ANIMAL_PHOTO.ID }, true);
     public static final UniqueKey<AnimalStatusRecord> ANIMAL_STATUS_CODE_KEY = Internal.createUniqueKey(AnimalStatus.ANIMAL_STATUS, DSL.name("animal_status_code_key"), new TableField[] { AnimalStatus.ANIMAL_STATUS.CODE }, true);
     public static final UniqueKey<AnimalStatusRecord> ANIMAL_STATUS_NAME_KEY = Internal.createUniqueKey(AnimalStatus.ANIMAL_STATUS, DSL.name("animal_status_name_key"), new TableField[] { AnimalStatus.ANIMAL_STATUS.NAME }, true);
     public static final UniqueKey<AnimalStatusRecord> ANIMAL_STATUS_PKEY = Internal.createUniqueKey(AnimalStatus.ANIMAL_STATUS, DSL.name("animal_status_pkey"), new TableField[] { AnimalStatus.ANIMAL_STATUS.ID }, true);
@@ -135,6 +139,7 @@ public class Keys {
     public static final ForeignKey<AnimalRecord, ArrivalSourceRecord> ANIMAL__ANIMAL_ARRIVAL_SOURCE_ID_FKEY = Internal.createForeignKey(Animal.ANIMAL, DSL.name("animal_arrival_source_id_fkey"), new TableField[] { Animal.ANIMAL.ARRIVAL_SOURCE_ID }, Keys.ARRIVAL_SOURCE_PKEY, new TableField[] { ArrivalSource.ARRIVAL_SOURCE.ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.NO_ACTION);
     public static final ForeignKey<AnimalRecord, CageRecord> ANIMAL__ANIMAL_CAGE_ID_FKEY = Internal.createForeignKey(Animal.ANIMAL, DSL.name("animal_cage_id_fkey"), new TableField[] { Animal.ANIMAL.CAGE_ID }, Keys.CAGE_PKEY, new TableField[] { Cage.CAGE.ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.NO_ACTION);
     public static final ForeignKey<AnimalRecord, AnimalStatusRecord> ANIMAL__ANIMAL_STATUS_ID_FKEY = Internal.createForeignKey(Animal.ANIMAL, DSL.name("animal_status_id_fkey"), new TableField[] { Animal.ANIMAL.STATUS_ID }, Keys.ANIMAL_STATUS_PKEY, new TableField[] { AnimalStatus.ANIMAL_STATUS.ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.NO_ACTION);
+    public static final ForeignKey<AnimalPhotoRecord, AnimalRecord> ANIMAL_PHOTO__ANIMAL_PHOTO_ANIMAL_ID_FKEY = Internal.createForeignKey(AnimalPhoto.ANIMAL_PHOTO, DSL.name("animal_photo_animal_id_fkey"), new TableField[] { AnimalPhoto.ANIMAL_PHOTO.ANIMAL_ID }, Keys.ANIMAL_PKEY, new TableField[] { Animal.ANIMAL.ID }, true, ForeignKeyRule.CASCADE, ForeignKeyRule.NO_ACTION);
     public static final ForeignKey<BatchStockRecord, ProductBatchRecord> BATCH_STOCK__BATCH_STOCK_BATCH_ID_FKEY = Internal.createForeignKey(BatchStock.BATCH_STOCK, DSL.name("batch_stock_batch_id_fkey"), new TableField[] { BatchStock.BATCH_STOCK.BATCH_ID }, Keys.PRODUCT_BATCH_PKEY, new TableField[] { ProductBatch.PRODUCT_BATCH.ID }, true, ForeignKeyRule.CASCADE, ForeignKeyRule.NO_ACTION);
     public static final ForeignKey<BatchStockRecord, WarehouseRecord> BATCH_STOCK__BATCH_STOCK_WAREHOUSE_ID_FKEY = Internal.createForeignKey(BatchStock.BATCH_STOCK, DSL.name("batch_stock_warehouse_id_fkey"), new TableField[] { BatchStock.BATCH_STOCK.WAREHOUSE_ID }, Keys.WAREHOUSE_PKEY, new TableField[] { Warehouse.WAREHOUSE.ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.NO_ACTION);
     public static final ForeignKey<DonationRecord, BenefactorRecord> DONATION__DONATION_BENEFACTOR_ID_FKEY = Internal.createForeignKey(Donation.DONATION, DSL.name("donation_benefactor_id_fkey"), new TableField[] { Donation.DONATION.BENEFACTOR_ID }, Keys.BENEFACTOR_PKEY, new TableField[] { Benefactor.BENEFACTOR.ID }, true, ForeignKeyRule.RESTRICT, ForeignKeyRule.NO_ACTION);

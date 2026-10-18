@@ -62,11 +62,27 @@ class GatewayAuthFilterTest {
     }
 
     @Test
-    void requestWithoutGatewayHeadersIsRejected() throws Exception {
+    void requestWithoutGatewayHeadersIsUnauthorized() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 
         filter.doFilter(new MockHttpServletRequest("GET", "/rooms"), response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentType()).startsWith("application/json");
+        assertThat(response.getContentAsString())
+                .contains("\"status\":401", "\"message\":\"Требуется авторизация\"", "\"path\":\"/rooms\"");
+        assertThat(chain.getRequest()).isNull();
+    }
+
+    @Test
+    void partialGatewayHeadersAreForbidden() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/rooms");
+        request.addHeader("X-User-Email", "guest@shelter.local");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
 
         assertThat(response.getStatus()).isEqualTo(403);
         assertThat(chain.getRequest()).isNull();

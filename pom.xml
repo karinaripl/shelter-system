@@ -22,6 +22,7 @@
         <module>gateway-service</module>
         <module>room-service</module>
         <module>auth-service</module>
+        <module>shelter-core-service</module>
     </modules>
 
     <properties>

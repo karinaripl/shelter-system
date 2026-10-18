@@ -5,6 +5,7 @@ package com.shelter.model.generated.shelter;
 
 
 import com.shelter.model.generated.shelter.tables.Animal;
+import com.shelter.model.generated.shelter.tables.AnimalPhoto;
 import com.shelter.model.generated.shelter.tables.AnimalStatus;
 import com.shelter.model.generated.shelter.tables.ArrivalSource;
 import com.shelter.model.generated.shelter.tables.BatchStock;
@@ -44,6 +45,11 @@ public class Tables {
      * The table <code>shelter_schema.animal</code>.
      */
     public static final Animal ANIMAL = Animal.ANIMAL;
+
+    /**
+     * The table <code>shelter_schema.animal_photo</code>.
+     */
+    public static final AnimalPhoto ANIMAL_PHOTO = AnimalPhoto.ANIMAL_PHOTO;
 
     /**
      * The table <code>shelter_schema.animal_status</code>.

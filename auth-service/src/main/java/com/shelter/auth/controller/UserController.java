@@ -22,9 +22,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** Управление пользователями и ролями. Доступно только администратору. */
+/**
+ * Управление пользователями и ролями — часть админ-панели (/admin/**), только ADMIN.
+ * Доступ проверяется трижды: шлюзом, правилом /admin/** в gateway-auth-starter и аннотацией ниже.
+ */
 @RestController
-@RequestMapping("/auth")
+@RequestMapping("/admin")
 @PreAuthorize("hasRole('ADMIN')")
 public class UserController {
 

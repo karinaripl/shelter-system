@@ -4,9 +4,9 @@
 (животные, медицина, склад, волонтёры, финансы) и публичный сервис пристройства
 (каталог, запись на знакомство, заявки). Выпускная квалификационная работа.
 
-> **Текущее состояние: шаг 2 — схема базы данных приюта.** Готовы инфраструктура (шлюз,
-> миграции, jOOQ, межсервисные вызовы), авторизация с ролями приюта и схема `shelter_schema`
-> с демонстрационными данными. Предметные сервисы добавляются следующими шагами (см. «План»).
+> **Текущее состояние: шаг 3 — `shelter-core-service`.** Готовы инфраструктура, авторизация с ролями,
+> схема `shelter_schema` с демо-данными, матрица доступа с закрытой админ-панелью `/admin/**`,
+> учёт животных и клеток, фото и публичный каталог. Остальное — следующими шагами (см. «План»).
 
 ## Стек
 
@@ -22,7 +22,8 @@ PostgreSQL · Liquibase · jOOQ · Docker Compose
 | `booking-service` | 8181 | Записи (будет перепрофилирован под визиты и заявки на пристройство) |
 | `notification-service` | 8182 | Уведомления (пока пишет в лог) |
 | `room-service` | 8183 | Временный демонстрационный сервис, будет заменён на `shelter-core-service` |
-| `gateway-auth-starter` | — | Общий стартер: проверка подписи шлюза во внутренних сервисах |
+| `shelter-core-service` | 8184 | Учёт приюта: животные, клетки, этапы, фото, публичный каталог, сотрудники в админ-панели (далее — медицина, склад, волонтёры, мероприятия, финансы) |
+| `gateway-auth-starter` | — | Общий стартер: проверка подписи шлюза, правило `/admin/**` только для ADMIN, ошибки 401/403 в общем формате |
 | `model` | — | Сгенерированные jOOQ-классы |
 | `liquibase` | — | Миграции схемы БД (в Docker запускается как одноразовый контейнер `migrations`) |
 
@@ -46,7 +47,8 @@ docker compose up --build
 1. собирается проект (Maven внутри Docker, на компьютере Java и Maven не нужны);
 2. запускается PostgreSQL;
 3. контейнер `migrations` накатывает миграции Liquibase и завершается;
-4. запускаются `auth-service`, `room-service`, `notification-service`, `booking-service`;
+4. запускаются `auth-service`, `shelter-core-service`, `room-service`, `notification-service`, `booking-service`
+   (фото животных хранятся в volume `shelter-photos`);
 5. запускается шлюз `gateway-service` на http://localhost:8766.
 
 Первая сборка занимает несколько минут: Docker скачивает образы и Maven-зависимости.
@@ -70,20 +72,36 @@ docker compose down -v                # остановить и удалить �
 (по умолчанию `admin@shelter.local` / `admin12345` — только для локального запуска).
 Если в базе уже есть хотя бы один ADMIN, этот шаг пропускается.
 
-## Роли и доступ
+## Права доступа
+
+Роли, полная матрица «раздел × роль», этапы жизненного цикла животного и кто их меняет —
+в [docs/access.md](docs/access.md). Это единый источник правил для всех сервисов.
 
 | Роль | Назначение |
 |---|---|
-| `ADMIN` | Учётные записи сотрудников и полный доступ |
-| `VET` | Медицина |
-| `CURATOR` | Животные, клетки, склад |
-| `ADOPTION_MANAGER` | Визиты на знакомство и заявки на пристройство |
-| `COORDINATOR` | Волонтёры, мероприятия, финансы |
-| `VISITOR` | Публичная часть: каталог, запись на знакомство, заявки |
+| `ADMIN` | Админ-панель (учётные записи, сотрудники, зарплаты, финансы) и полный доступ |
+| `VET` | Медицина и медицинское состояние животных |
+| `CURATOR` | Животные, клетки, фото, склад |
+| `ADOPTION_MANAGER` | Визиты, заявки, пристройство, фото, мероприятия |
+| `COORDINATOR` | Волонтёры, закрепления, мероприятия |
+| `VISITOR` | Публичный каталог и свои заявки |
+
+Всё о сотрудниках и деньгах живёт под `/admin/**` и доступно только `ADMIN`: это проверяет шлюз
+и ещё раз каждый сервис. Без токена открыты только регистрация, вход и `/public/**`.
+
+**Демо-учётки — только для демонстрации** (создаются с контекстом `demo`):
+
+| Email | Пароль | Роль |
+|---|---|---|
+| `admin@shelter.local` | `admin12345` | ADMIN (связан с карточкой директора) |
+| `lebedev@demo.shelter.local`, `kozlova@demo.shelter.local` | `demo12345` | VET |
+| `fedorov@demo.shelter.local` | `demo12345` | CURATOR |
+| `orlova@demo.shelter.local` | `demo12345` | ADOPTION_MANAGER |
+| `belova@demo.shelter.local` | `demo12345` | COORDINATOR |
 
 - У пользователя может быть несколько ролей, но хотя бы одна.
 - Самостоятельная регистрация (`POST /auth/register`) всегда даёт только `VISITOR`.
-  Сотрудников с нужными ролями создаёт администратор (`POST /auth/users`).
+  Сотрудников с нужными ролями создаёт администратор (`POST /admin/users`).
 - Роли передаются в JWT списком (claim `roles`). Шлюз передаёт их сервисам в заголовке
   `X-User-Roles` через запятую и подписывает (`X-Gateway-Signature`). `gateway-auth-starter`
   превращает каждую роль в `ROLE_<роль>`, поэтому в сервисах работает `@PreAuthorize("hasRole('ADMIN')")`.
@@ -95,11 +113,23 @@ docker compose down -v                # остановить и удалить �
 | `POST /auth/login` | все | Вход, возвращает токен |
 | `GET /auth/me` | вошедший | Свой профиль и роли |
 | `PUT /auth/me/password` | вошедший | Смена своего пароля |
-| `GET /auth/users`, `GET /auth/users/{id}` | ADMIN | Пользователи |
-| `POST /auth/users` | ADMIN | Создать пользователя со списком ролей |
-| `PUT /auth/users/{id}/roles` | ADMIN | Заменить список ролей |
-| `PATCH /auth/users/{id}/status` | ADMIN | Заблокировать / разблокировать (`{"enabled": false}`) |
-| `GET /auth/roles` | ADMIN | Список ролей с описанием |
+| `GET /admin/users`, `GET /admin/users/{id}` | ADMIN | Пользователи |
+| `POST /admin/users` | ADMIN | Создать пользователя со списком ролей |
+| `PUT /admin/users/{id}/roles` | ADMIN | Заменить список ролей |
+| `PATCH /admin/users/{id}/status` | ADMIN | Заблокировать / разблокировать (`{"enabled": false}`) |
+| `GET /admin/roles` | ADMIN | Список ролей с описанием |
+| `GET /admin/employees` | ADMIN | Сотрудники с должностями и окладами |
+| `GET /animal-statuses`, `GET /arrival-sources` | сотрудники | Справочники для форм |
+| `GET /cages`, `GET /cages/{id}` | сотрудники | Клетки с заполненностью; карточка со списком животных |
+| `POST /cages`, `PUT /cages/{id}`, `DELETE /cages/{id}` | ADMIN, CURATOR | Клетки |
+| `GET /animals`, `GET /animals/{id}` | сотрудники | Список (фильтры, `page`, `size`, `sort=arrivalDate,desc`) и карточка |
+| `POST /animals`, `PUT /animals/{id}`, `PUT /animals/{id}/cage` | ADMIN, CURATOR | Поступление, описание, перевод в клетку |
+| `PUT /animals/{id}/status` | ADMIN, CURATOR | Этап жизненного цикла (`RESERVED` — только ADMIN) |
+| `PUT /animals/{id}/health-state` | ADMIN, VET | Здоров / карантин / лечение |
+| `POST /animals/{id}/departure` | ADMIN, CURATOR, VET (только «умер») | Выбытие |
+| `GET /animals/{id}/photos`, `GET /animals/{id}/photos/{photoId}/file` | сотрудники | Фото |
+| `POST /animals/{id}/photos`, `DELETE …/{photoId}`, `PUT …/{photoId}/main` | ADMIN, CURATOR, ADOPTION_MANAGER | Загрузка (JPG/PNG до 5 МБ), удаление, главное фото |
+| `GET /public/animals`, `GET /public/animals/{id}`, `GET /public/photos/{photoId}` | все, без токена | Публичный каталог |
 
 Администратор не может снять роль `ADMIN` с себя или заблокировать себя — так в системе
 всегда остаётся хотя бы один администратор. Заблокированный пользователь не может войти;
@@ -135,7 +165,7 @@ $auth = @{ Authorization = "Bearer $admin" }
 # администратор создаёт комнату и сотрудника с двумя ролями
 Invoke-RestMethod -Method Post http://localhost:8766/rooms -Headers $auth -ContentType 'application/json' `
   -Body '{"name":"Room 1","capacity":3,"location":"Floor 1"}'
-Invoke-RestMethod -Method Post http://localhost:8766/auth/users -Headers $auth -ContentType 'application/json' `
+Invoke-RestMethod -Method Post http://localhost:8766/admin/users -Headers $auth -ContentType 'application/json' `
   -Body '{"username":"vet","email":"vet@shelter.local","password":"vet-password","roles":["VET","CURATOR"]}'
 
 # регистрация посетителя: всегда роль VISITOR
@@ -160,7 +190,7 @@ ADMIN=$(curl -s -X POST localhost:8766/auth/login -H 'Content-Type: application/
 
 curl -s -X POST localhost:8766/rooms -H "Authorization: Bearer $ADMIN" \
   -H 'Content-Type: application/json' -d '{"name":"Room 1","capacity":3,"location":"Floor 1"}'
-curl -s -X POST localhost:8766/auth/users -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
+curl -s -X POST localhost:8766/admin/users -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
   -d '{"username":"vet","email":"vet@shelter.local","password":"vet-password","roles":["VET","CURATOR"]}'
 
 VISITOR=$(curl -s -X POST localhost:8766/auth/register -H 'Content-Type: application/json' \
@@ -172,9 +202,27 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST localhost:8766/rooms -H "Author
 curl -s -o /dev/null -w '%{http_code}\n' localhost:8766/rooms   # 401
 ```
 
+### Postman-коллекции с автотестами
+
+В `docs/postman`:
+
+- `shelter-step1.postman_collection.json` — регистрация, вход, профиль, смена пароля, учётные записи (`/admin/users`);
+- `shelter-step3.postman_collection.json` — сквозной сценарий шага 3 (сотрудники → клетки → поступление → фото →
+  перевод → «готов к пристройству» → публичный каталог → выбытие) и проверки матрицы доступа и правил.
+
+В Postman: Import → файл коллекции → Run. Для загрузки фото укажите рабочую папку `docs/postman`
+(Settings → General → Working directory). Без установки Node.js коллекции запускаются через Docker:
+
+```bash
+docker run --rm -v "$PWD/docs/postman:/etc/newman" postman/newman:6-alpine \
+  run shelter-step3.postman_collection.json --env-var baseUrl=http://host.docker.internal:8766
+```
+
+Коллекции можно запускать повторно: email и номера клеток уникальны для каждого прогона.
+
 ## База данных приюта
 
-Схема `shelter_schema` (28 таблиц): животные и клетки, медицина, склад, сотрудники и волонтёры,
+Схема `shelter_schema` (29 таблиц): животные и клетки, медицина, склад, сотрудники и волонтёры,
 мероприятия, финансы. ER-диаграмма, описание таблиц, отличия от прототипа и бизнес-правила
 для следующих шагов — в [docs/database.md](docs/database.md).
 
@@ -199,7 +247,7 @@ mvn -pl model -Pjooq-codegen generate-sources
 - [x] **Шаг 0.** Каркас: перенос, переименование в `com.shelter`, исправление шлюза и миграций, сборка без БД, запуск всей системы через `docker compose up --build`
 - [x] **Шаг 1.** Авторизация: роли приюта, запрет самоназначения роли при регистрации, валидация, единый формат ошибок
 - [x] **Шаг 2.** Схема БД приюта в Liquibase (перенос из прототипа) и генерация jOOQ
-- [ ] **Шаг 3.** `shelter-core-service`: животные, клетки, статусы
+- [x] **Шаг 3.** `shelter-core-service`: матрица доступа, животные, клетки, этапы, фото, публичный каталог, `/admin/employees`
 - [ ] **Шаг 4.** Медицина: карты, процедуры, нормы расхода
 - [ ] **Шаг 5.** Склад: поставки, партии, сроки годности, списание
 - [ ] **Шаг 6.** Волонтёры, мероприятия, финансы

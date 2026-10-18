@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: shelter-core-service
+  config:
+    # Подхватываем .env из корня проекта (работает и при запуске из корня, и из папки модуля)
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
+  liquibase:
+    enabled: false
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/shelter}
+    username: ${DB_USERNAME:shelter}
+    password: ${DB_PASSWORD:shelter}
+  servlet:
+    multipart:
+      # Фото животных: до 5 МБ (проверяется и в коде, чтобы вернуть понятное сообщение)
+      max-file-size: 5MB
+      max-request-size: 6MB
+  jackson:
+    default-property-inclusion: always
+
+server:
+  port: 8184
+
+gateway:
+  auth:
+    secret: ${JWT_SECRET}
+    # Публичный каталог и фото из него — без входа в систему
+    public-paths: /public/**
+
+shelter:
+  photos:
+    # Каталог для файлов фотографий. В Docker — volume shelter-photos
+    dir: ${PHOTOS_DIR:./data/photos}

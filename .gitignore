@@ -50,3 +50,6 @@ local.properties
 
 .env
 /**/.env
+# Фото животных при запуске сервиса из IDE (в Docker — volume shelter-photos)
+/data/
+/**/data/photos/

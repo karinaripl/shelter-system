@@ -106,6 +106,20 @@ services:
       NOTIFICATION_SERVICE_URL: http://notification-service:8182
     depends_on: *after-migrations
 
+  shelter-core-service:
+    build:
+      context: .
+      args:
+        MODULE: shelter-core-service
+    image: shelter/shelter-core-service
+    environment:
+      <<: *java-env
+      # Файлы фото животных — в volume, в образ и в git не попадают
+      PHOTOS_DIR: /data/photos
+    volumes:
+      - shelter-photos:/data/photos
+    depends_on: *after-migrations
+
   gateway-service:
     build:
       context: .
@@ -118,13 +132,16 @@ services:
       BOOKING_SERVICE_URL: http://booking-service:8181
       NOTIFICATION_SERVICE_URL: http://notification-service:8182
       ROOM_SERVICE_URL: http://room-service:8183
+      SHELTER_CORE_SERVICE_URL: http://shelter-core-service:8184
     ports:
       - "8766:8766"
     depends_on:
       - auth-service
+      - shelter-core-service
       - room-service
       - notification-service
       - booking-service
 
 volumes:
   shelter-pgdata:
+  shelter-photos:

@@ -5,6 +5,7 @@ package com.shelter.model.generated.shelter;
 
 
 import com.shelter.model.generated.shelter.tables.Animal;
+import com.shelter.model.generated.shelter.tables.AnimalPhoto;
 import com.shelter.model.generated.shelter.tables.AnimalStatus;
 import com.shelter.model.generated.shelter.tables.ArrivalSource;
 import com.shelter.model.generated.shelter.tables.BatchStock;
@@ -59,6 +60,11 @@ public class ShelterSchema extends SchemaImpl {
      * The table <code>shelter_schema.animal</code>.
      */
     public final Animal ANIMAL = Animal.ANIMAL;
+
+    /**
+     * The table <code>shelter_schema.animal_photo</code>.
+     */
+    public final AnimalPhoto ANIMAL_PHOTO = AnimalPhoto.ANIMAL_PHOTO;
 
     /**
      * The table <code>shelter_schema.animal_status</code>.
@@ -212,6 +218,7 @@ public class ShelterSchema extends SchemaImpl {
     public final List<Table<?>> getTables() {
         return Arrays.asList(
             Animal.ANIMAL,
+            AnimalPhoto.ANIMAL_PHOTO,
             AnimalStatus.ANIMAL_STATUS,
             ArrivalSource.ARRIVAL_SOURCE,
             BatchStock.BATCH_STOCK,

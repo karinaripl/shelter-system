@@ -107,6 +107,11 @@ public class MedicalCard extends TableImpl<MedicalCardRecord> {
      */
     public final TableField<MedicalCardRecord, OffsetDateTime> UPDATED_AT = createField(DSL.name("updated_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false).defaultValue(DSL.field(DSL.raw("now()"), SQLDataType.TIMESTAMPWITHTIMEZONE)), this, "");
 
+    /**
+     * The column <code>shelter_schema.medical_card.chronic_conditions</code>.
+     */
+    public final TableField<MedicalCardRecord, String> CHRONIC_CONDITIONS = createField(DSL.name("chronic_conditions"), SQLDataType.CLOB, this, "");
+
     private MedicalCard(Name alias, Table<MedicalCardRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
     }

@@ -245,6 +245,20 @@ public class AnimalRecord extends UpdatableRecordImpl<AnimalRecord> {
         return (OffsetDateTime) get(15);
     }
 
+    /**
+     * Setter for <code>shelter_schema.animal.health_state</code>.
+     */
+    public void setHealthState(String value) {
+        set(16, value);
+    }
+
+    /**
+     * Getter for <code>shelter_schema.animal.health_state</code>.
+     */
+    public String getHealthState() {
+        return (String) get(16);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -268,7 +282,7 @@ public class AnimalRecord extends UpdatableRecordImpl<AnimalRecord> {
     /**
      * Create a detached, initialised AnimalRecord
      */
-    public AnimalRecord(Long id, String name, String gender, LocalDate birthDate, String color, String breed, String character, String specialMarks, Long statusId, Long cageId, Long arrivalSourceId, LocalDate arrivalDate, LocalDate departureDate, String departureNote, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+    public AnimalRecord(Long id, String name, String gender, LocalDate birthDate, String color, String breed, String character, String specialMarks, Long statusId, Long cageId, Long arrivalSourceId, LocalDate arrivalDate, LocalDate departureDate, String departureNote, OffsetDateTime createdAt, OffsetDateTime updatedAt, String healthState) {
         super(Animal.ANIMAL);
 
         setId(id);
@@ -287,6 +301,7 @@ public class AnimalRecord extends UpdatableRecordImpl<AnimalRecord> {
         setDepartureNote(departureNote);
         setCreatedAt(createdAt);
         setUpdatedAt(updatedAt);
+        setHealthState(healthState);
         resetTouchedOnNotNull();
     }
 }
