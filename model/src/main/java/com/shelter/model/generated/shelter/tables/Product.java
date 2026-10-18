@@ -13,11 +13,13 @@ import com.shelter.model.generated.shelter.tables.ProductBatch.ProductBatchPath;
 import com.shelter.model.generated.shelter.tables.ProductCategory.ProductCategoryPath;
 import com.shelter.model.generated.shelter.tables.records.ProductRecord;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
+import org.jooq.Check;
 import org.jooq.Condition;
 import org.jooq.Field;
 import org.jooq.ForeignKey;
@@ -98,6 +100,11 @@ public class Product extends TableImpl<ProductRecord> {
      * The column <code>shelter_schema.product.updated_at</code>.
      */
     public final TableField<ProductRecord, OffsetDateTime> UPDATED_AT = createField(DSL.name("updated_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false).defaultValue(DSL.field(DSL.raw("now()"), SQLDataType.TIMESTAMPWITHTIMEZONE)), this, "");
+
+    /**
+     * The column <code>shelter_schema.product.min_stock</code>.
+     */
+    public final TableField<ProductRecord, BigDecimal> MIN_STOCK = createField(DSL.name("min_stock"), SQLDataType.NUMERIC(10, 3), this, "");
 
     private Product(Name alias, Table<ProductRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
@@ -236,6 +243,13 @@ public class Product extends TableImpl<ProductRecord> {
      */
     public ProcedureTypePath procedureType() {
         return procedureConsumptionRate().procedureType();
+    }
+
+    @Override
+    public List<Check<ProductRecord>> getChecks() {
+        return Arrays.asList(
+            Internal.createCheck(this, DSL.name("chk_product_min_stock"), "((min_stock >= (0)::numeric))", true)
+        );
     }
 
     @Override

@@ -6,6 +6,7 @@ package com.shelter.model.generated.shelter.tables.records;
 
 import com.shelter.model.generated.shelter.tables.Product;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 import org.jooq.Record1;
@@ -118,6 +119,20 @@ public class ProductRecord extends UpdatableRecordImpl<ProductRecord> {
         return (OffsetDateTime) get(6);
     }
 
+    /**
+     * Setter for <code>shelter_schema.product.min_stock</code>.
+     */
+    public void setMinStock(BigDecimal value) {
+        set(7, value);
+    }
+
+    /**
+     * Getter for <code>shelter_schema.product.min_stock</code>.
+     */
+    public BigDecimal getMinStock() {
+        return (BigDecimal) get(7);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -141,7 +156,7 @@ public class ProductRecord extends UpdatableRecordImpl<ProductRecord> {
     /**
      * Create a detached, initialised ProductRecord
      */
-    public ProductRecord(Long id, String name, Long categoryId, String unitOfMeasure, Boolean isActive, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+    public ProductRecord(Long id, String name, Long categoryId, String unitOfMeasure, Boolean isActive, OffsetDateTime createdAt, OffsetDateTime updatedAt, BigDecimal minStock) {
         super(Product.PRODUCT);
 
         setId(id);
@@ -151,6 +166,7 @@ public class ProductRecord extends UpdatableRecordImpl<ProductRecord> {
         setIsActive(isActive);
         setCreatedAt(createdAt);
         setUpdatedAt(updatedAt);
+        setMinStock(minStock);
         resetTouchedOnNotNull();
     }
 }

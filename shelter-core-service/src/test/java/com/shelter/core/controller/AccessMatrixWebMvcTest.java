@@ -9,6 +9,11 @@ import com.shelter.core.service.MedicalCardService;
 import com.shelter.core.service.MedicalRecordService;
 import com.shelter.core.service.ProcedureService;
 import com.shelter.core.service.ProcedureTypeService;
+import com.shelter.core.service.ProductService;
+import com.shelter.core.service.ReceiptService;
+import com.shelter.core.service.StockOperationService;
+import com.shelter.core.service.StockReportService;
+import com.shelter.core.service.WarehouseReferenceService;
 import com.shelter.core.service.PublicCatalogService;
 import com.shelter.gatewayauth.config.GatewayAuthAutoConfiguration;
 import com.shelter.gatewayauth.filter.GatewayAuthFilter;
@@ -57,6 +62,10 @@ class AccessMatrixWebMvcTest {
     private static final Set<String> PHOTOS_WRITE = Set.of("ADMIN", "CURATOR", "ADOPTION_MANAGER");
     private static final Set<String> MEDICAL = Set.of("ADMIN", "VET");
     private static final Set<String> PROCEDURE_TYPES_READ = Set.of("ADMIN", "VET", "CURATOR");
+    private static final Set<String> WAREHOUSE_READ = Set.of("ADMIN", "VET", "CURATOR");
+    private static final Set<String> WAREHOUSE_WRITE = Set.of("ADMIN", "CURATOR");
+    private static final Set<String> RECEIPTS = Set.of("ADMIN", "CURATOR");
+    private static final String PRODUCT_BODY = "{\"name\":\"Корм\",\"categoryId\":1,\"unitOfMeasure\":\"кг\"}";
 
     /** Эндпоинт и роли, которым он разрешён. Тела запросов валидны: иначе запрещённая роль получила бы 400. */
     record Endpoint(HttpMethod method, String path, String body, boolean multipart, Set<String> allowed) {
@@ -119,6 +128,66 @@ class AccessMatrixWebMvcTest {
                         "{\"rates\":[{\"productId\":9,\"quantity\":1}]}", false, MEDICAL),
                 new Endpoint(HttpMethod.DELETE, "/procedure-types/2", null, false, MEDICAL),
 
+                // Справочники склада и товары: читают ADMIN, CURATOR, VET; меняют ADMIN, CURATOR
+                new Endpoint(HttpMethod.GET, "/product-categories", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.GET, "/product-categories/1", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.POST, "/product-categories", "{\"name\":\"Игрушки\"}", false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.PUT, "/product-categories/1", "{\"name\":\"Игрушки\"}", false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.DELETE, "/product-categories/1", null, false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.GET, "/warehouses", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.GET, "/warehouses/1", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.POST, "/warehouses", "{\"name\":\"Склад 4\"}", false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.PUT, "/warehouses/1", "{\"name\":\"Склад 4\"}", false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.DELETE, "/warehouses/1", null, false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.GET, "/suppliers", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.GET, "/suppliers/1", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.POST, "/suppliers", "{\"name\":\"Поставщик\"}", false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.PUT, "/suppliers/1", "{\"name\":\"Поставщик\"}", false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.DELETE, "/suppliers/1", null, false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.GET, "/products", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.GET, "/products/1", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.GET, "/products/1/stock", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.POST, "/products", PRODUCT_BODY, false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.PUT, "/products/1", PRODUCT_BODY, false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.PUT, "/products/1/active", "{\"active\":false}", false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.DELETE, "/products/1", null, false, WAREHOUSE_WRITE),
+
+                // Приход: поставки (без оплаты), натуральные пожертвования, благотворители — ADMIN, CURATOR
+                new Endpoint(HttpMethod.GET, "/supplies", null, false, RECEIPTS),
+                new Endpoint(HttpMethod.GET, "/supplies/1", null, false, RECEIPTS),
+                new Endpoint(HttpMethod.POST, "/supplies",
+                        "{\"supplierId\":1,\"warehouseId\":1,\"items\":[{\"productId\":1,\"quantity\":10}]}", false, RECEIPTS),
+                new Endpoint(HttpMethod.DELETE, "/supplies/1", null, false, RECEIPTS),
+                new Endpoint(HttpMethod.GET, "/goods-donations", null, false, RECEIPTS),
+                new Endpoint(HttpMethod.GET, "/goods-donations/1", null, false, RECEIPTS),
+                new Endpoint(HttpMethod.POST, "/goods-donations",
+                        "{\"warehouseId\":1,\"items\":[{\"productId\":1,\"quantity\":3}]}", false, RECEIPTS),
+                new Endpoint(HttpMethod.DELETE, "/goods-donations/1", null, false, RECEIPTS),
+                new Endpoint(HttpMethod.GET, "/benefactors", null, false, RECEIPTS),
+
+                // Движение по складу: читают ADMIN, CURATOR, VET; оформляют ADMIN, CURATOR
+                new Endpoint(HttpMethod.GET, "/expenses", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.GET, "/expenses/1", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.POST, "/expenses", "{\"productId\":1,\"warehouseId\":1,\"quantity\":2}", false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.DELETE, "/expenses/1", null, false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.GET, "/stock-transfers", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.POST, "/stock-transfers",
+                        "{\"batchId\":1,\"fromWarehouseId\":1,\"toWarehouseId\":2,\"quantity\":1}", false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.GET, "/write-offs", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.GET, "/write-offs/1", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.POST, "/write-offs",
+                        "{\"batchId\":1,\"warehouseId\":1,\"quantity\":1,\"reason\":\"DAMAGED\"}", false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.GET, "/write-offs/expired/preview", null, false, WAREHOUSE_WRITE),
+                new Endpoint(HttpMethod.POST, "/write-offs/expired", "{\"token\":\"abc\"}", false, WAREHOUSE_WRITE),
+
+                // Отчёты склада: ADMIN, CURATOR, VET
+                new Endpoint(HttpMethod.GET, "/reports/stock", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.GET, "/reports/expiring", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.GET, "/reports/expired", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.GET, "/reports/below-minimum", null, false, WAREHOUSE_READ),
+                new Endpoint(HttpMethod.GET, "/reports/movements?productId=1", null, false, WAREHOUSE_READ),
+
+
 
                 new Endpoint(HttpMethod.GET, "/admin/employees", null, false, Set.of("ADMIN"))
         );
@@ -168,6 +237,16 @@ class AccessMatrixWebMvcTest {
     private ProcedureService procedureService;
     @MockitoBean
     private ProcedureTypeService procedureTypeService;
+    @MockitoBean
+    private WarehouseReferenceService warehouseReferenceService;
+    @MockitoBean
+    private ProductService productService;
+    @MockitoBean
+    private ReceiptService receiptService;
+    @MockitoBean
+    private StockOperationService stockOperationService;
+    @MockitoBean
+    private StockReportService stockReportService;
 
     @BeforeEach
     void stubFiles() {
@@ -195,7 +274,7 @@ class AccessMatrixWebMvcTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401))
                 .andExpect(jsonPath("$.message").value("Требуется авторизация"))
-                .andExpect(jsonPath("$.path").value(endpoint.path()));
+                .andExpect(jsonPath("$.path").value(endpoint.path().split("\\?")[0]));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -259,6 +338,32 @@ class AccessMatrixWebMvcTest {
                 Arguments.of("/procedure-types/2/rates", "{\"rates\":[{\"productId\":9,\"quantity\":0}]}"),
                 Arguments.of("/procedure-types/2/rates", "{}")
         );
+    }
+
+    /** Цены и сумма поставки, которые сервис не заполнил (не ADMIN), отсутствуют в JSON, а не приходят как null. */
+    @Test
+    void supplyWithoutMoneyHasNoPriceFieldsInJson() throws Exception {
+        var item = new com.shelter.core.dto.ReceiptItemResponse(5L, 1L, "Корм", "кг", java.math.BigDecimal.TEN, null, null);
+        when(receiptService.findSupply(1L)).thenReturn(new com.shelter.core.dto.SupplyResponse(1L, null, null, null,
+                false, null, null, List.of(item), null, null));
+
+        mvc.perform(signed(MockMvcRequestBuilders.get("/supplies/1"), "CURATOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalAmount").doesNotExist())
+                .andExpect(jsonPath("$.items[0].unitPrice").doesNotExist())
+                .andExpect(jsonPath("$.items[0].quantity").value(10));
+    }
+
+    @Test
+    void supplyWithMoneyHasPriceFieldsInJson() throws Exception {
+        var item = new com.shelter.core.dto.ReceiptItemResponse(5L, 1L, "Корм", "кг", java.math.BigDecimal.TEN, null,
+                new java.math.BigDecimal("12.50"));
+        when(receiptService.findSupply(1L)).thenReturn(new com.shelter.core.dto.SupplyResponse(1L, null, null, null,
+                false, null, null, List.of(item), new java.math.BigDecimal("125.00"), null));
+
+        mvc.perform(signed(MockMvcRequestBuilders.get("/supplies/1"), "ADMIN"))
+                .andExpect(jsonPath("$.totalAmount").value(125.00))
+                .andExpect(jsonPath("$.items[0].unitPrice").value(12.50));
     }
 
     @Test

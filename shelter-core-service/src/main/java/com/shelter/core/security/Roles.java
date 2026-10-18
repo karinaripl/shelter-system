@@ -33,6 +33,15 @@ public final class Roles {
     /** Выбытие:ветеринар — только «умер» (проверяется в сервисе). */
     public static final String DEPARTURE_WRITE = "hasAnyRole('ADMIN', 'CURATOR', 'VET')";
 
+    /** Склад: товары, партии, остатки, расход, списания, перемещения, справочники склада, отчёты — чтение. */
+    public static final String WAREHOUSE_READ = "hasAnyRole('ADMIN', 'VET', 'CURATOR')";
+
+    /** Склад: изменение (ветеринар расходует материалы только через процедуры). */
+    public static final String WAREHOUSE_WRITE = "hasAnyRole('ADMIN', 'CURATOR')";
+
+    /** Приход: поставки (без оплаты), натуральные пожертвования, список благотворителей (только имена). */
+    public static final String RECEIPTS = "hasAnyRole('ADMIN', 'CURATOR')";
+
     /** Фото животных: изменение. */
     public static final String PHOTOS_WRITE = "hasAnyRole('ADMIN', 'CURATOR', 'ADOPTION_MANAGER')";
 

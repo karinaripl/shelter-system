@@ -120,4 +120,20 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="shelter-V15" author="olga">
+        <comment>Склад: минимальный остаток товара, журнал перемещений между складами</comment>
+        <sqlFile path="db/changelog/shelter/V15__warehouse_operations.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V15__warehouse_operations_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="shelter-V16-demo" author="olga" context="demo">
+        <comment>Демо-данные шага 5: минимальные остатки товаров, склад поступления демо-партий и перемещения</comment>
+        <sqlFile path="db/changelog/shelter/V16__demo_min_stock.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V16__demo_min_stock_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

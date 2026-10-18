@@ -3,6 +3,8 @@ package com.shelter.core.repository;
 import com.shelter.core.dto.CardFlag;
 import com.shelter.core.dto.MaterialChoice;
 import com.shelter.core.dto.ProcedureDeletionResponse;
+import com.shelter.core.dto.BatchOption;
+import com.shelter.core.dto.ExpiredBatch;
 import com.shelter.core.dto.ProcedureMaterialsResponse;
 import com.shelter.core.dto.ProcedureRequest;
 import com.shelter.core.dto.ProcedureResponse;
@@ -88,12 +90,12 @@ class ProcedureStockIT extends PostgresIntegrationTest {
         }
 
         @Override
-        public void insertExpense(Long batchId, Long warehouseId, Long employeeId, Long animalId, Long procedureId,
+        public Long insertExpense(Long batchId, Long warehouseId, Long employeeId, Long animalId, Long procedureId,
                                   BigDecimal quantity, LocalDate expenseDate, String notes) {
             if (failOnExpense > 0 && ++expenses == failOnExpense) {
                 throw new IllegalStateException("Сбой базы данных при записи расхода");
             }
-            super.insertExpense(batchId, warehouseId, employeeId, animalId, procedureId, quantity, expenseDate, notes);
+            return super.insertExpense(batchId, warehouseId, employeeId, animalId, procedureId, quantity, expenseDate, notes);
         }
 
         void reset(int failOn) {
@@ -273,7 +275,7 @@ class ProcedureStockIT extends PostgresIntegrationTest {
                     .filter(m -> m.productId().equals(vaccine)).findFirst().orElseThrow();
 
             assertThat(vaccineHint.batches().getFirst().batchId()).isEqualTo(nearBatch);
-            assertThat(vaccineHint.expiredBatches()).extracting(ProcedureMaterialsResponse.ExpiredBatch::batchId)
+            assertThat(vaccineHint.expiredBatches()).extracting(ExpiredBatch::batchId)
                     .containsExactly(expiredBatch);
         }
 

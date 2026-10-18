@@ -2,6 +2,8 @@ package com.shelter.core.service;
 
 import com.shelter.core.dto.CardFlag;
 import com.shelter.core.dto.ConsumptionRateRequest;
+import com.shelter.core.dto.BatchOption;
+import com.shelter.core.dto.ExpiredBatch;
 import com.shelter.core.dto.ProcedureMaterialsResponse;
 import com.shelter.core.dto.ProcedureTypeRequest;
 import com.shelter.core.exception.BusinessRuleException;
@@ -156,7 +158,7 @@ class ProcedureTypeServiceTest {
         ProcedureMaterialsResponse response = service.materials(TYPE_ID);
 
         ProcedureMaterialsResponse.Material vaccine = response.materials().getFirst();
-        assertThat(vaccine.batches()).extracting(ProcedureMaterialsResponse.BatchOption::batchId).containsExactly(18L, 19L);
+        assertThat(vaccine.batches()).extracting(BatchOption::batchId).containsExactly(18L, 19L);
         assertThat(vaccine.batches().get(0).recommended()).isTrue();
         assertThat(vaccine.batches().get(1).recommended()).isFalse();
         assertThat(vaccine.expiredBatches()).singleElement().satisfies(b -> {

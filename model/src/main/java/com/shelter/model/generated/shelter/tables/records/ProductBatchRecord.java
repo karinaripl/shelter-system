@@ -162,6 +162,22 @@ public class ProductBatchRecord extends UpdatableRecordImpl<ProductBatchRecord> 
         return (OffsetDateTime) get(9);
     }
 
+    /**
+     * Setter for
+     * <code>shelter_schema.product_batch.received_warehouse_id</code>.
+     */
+    public void setReceivedWarehouseId(Long value) {
+        set(10, value);
+    }
+
+    /**
+     * Getter for
+     * <code>shelter_schema.product_batch.received_warehouse_id</code>.
+     */
+    public Long getReceivedWarehouseId() {
+        return (Long) get(10);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -185,7 +201,7 @@ public class ProductBatchRecord extends UpdatableRecordImpl<ProductBatchRecord> 
     /**
      * Create a detached, initialised ProductBatchRecord
      */
-    public ProductBatchRecord(Long id, Long productId, Long supplyId, Long donationId, LocalDate receivedDate, LocalDate expirationDate, BigDecimal quantity, BigDecimal unitPrice, Long employeeId, OffsetDateTime createdAt) {
+    public ProductBatchRecord(Long id, Long productId, Long supplyId, Long donationId, LocalDate receivedDate, LocalDate expirationDate, BigDecimal quantity, BigDecimal unitPrice, Long employeeId, OffsetDateTime createdAt, Long receivedWarehouseId) {
         super(ProductBatch.PRODUCT_BATCH);
 
         setId(id);
@@ -198,6 +214,7 @@ public class ProductBatchRecord extends UpdatableRecordImpl<ProductBatchRecord> 
         setUnitPrice(unitPrice);
         setEmployeeId(employeeId);
         setCreatedAt(createdAt);
+        setReceivedWarehouseId(receivedWarehouseId);
         resetTouchedOnNotNull();
     }
 }

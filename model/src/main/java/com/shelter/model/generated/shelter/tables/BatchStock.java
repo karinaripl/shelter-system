@@ -10,6 +10,7 @@ import com.shelter.model.generated.shelter.ShelterSchema;
 import com.shelter.model.generated.shelter.tables.ProductBatch.ProductBatchPath;
 import com.shelter.model.generated.shelter.tables.ProductExpense.ProductExpensePath;
 import com.shelter.model.generated.shelter.tables.ProductWriteOff.ProductWriteOffPath;
+import com.shelter.model.generated.shelter.tables.StockTransfer.StockTransferPath;
 import com.shelter.model.generated.shelter.tables.Warehouse.WarehousePath;
 import com.shelter.model.generated.shelter.tables.records.BatchStockRecord;
 
@@ -204,6 +205,34 @@ public class BatchStock extends TableImpl<BatchStockRecord> {
             _productExpense = new ProductExpensePath(this, null, Keys.PRODUCT_EXPENSE__FK_EXPENSE_STOCK.getInverseKey());
 
         return _productExpense;
+    }
+
+    private transient StockTransferPath _fkTransferFromStock;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>shelter_schema.stock_transfer</code> table, via the
+     * <code>fk_transfer_from_stock</code> key
+     */
+    public StockTransferPath fkTransferFromStock() {
+        if (_fkTransferFromStock == null)
+            _fkTransferFromStock = new StockTransferPath(this, null, Keys.STOCK_TRANSFER__FK_TRANSFER_FROM_STOCK.getInverseKey());
+
+        return _fkTransferFromStock;
+    }
+
+    private transient StockTransferPath _fkTransferToStock;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>shelter_schema.stock_transfer</code> table, via the
+     * <code>fk_transfer_to_stock</code> key
+     */
+    public StockTransferPath fkTransferToStock() {
+        if (_fkTransferToStock == null)
+            _fkTransferToStock = new StockTransferPath(this, null, Keys.STOCK_TRANSFER__FK_TRANSFER_TO_STOCK.getInverseKey());
+
+        return _fkTransferToStock;
     }
 
     private transient ProductWriteOffPath _productWriteOff;

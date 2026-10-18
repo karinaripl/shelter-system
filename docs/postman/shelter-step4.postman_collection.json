@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Shelter — шаг 4: медицина, процедуры, списание со склада",
-    "description": "Сквозной сценарий шага 4 с автотестами на демо-данных (docker compose up загружает их по умолчанию): вход ветеринара → осмотр с весом → вакцинация без выбора партий (списание по FEFO: партия с ближайшим сроком, просроченные не используются) → остаток уменьшился → флаг «привит» в медкарте и в сводке → ручной выбор не-FEFO партии → просроченную партию выбрать нельзя → нехватка материалов (409, остатки не изменились) → удаление ошибочной кастрации снимает флаг, а у животного, поступившего стерилизованным, флаг остаётся → состояние здоровья «лечение» и обратно → правила и матрица доступа.\nНужны демо-учётки (пароль demo12345): ветеринар lebedev, куратор fedorov, координатор belova — у них есть карточки сотрудников, без которых процедуры не вносятся (409).\nПовторный запуск возможен: животные и клетка создаются заново, ожидаемые партии берутся из подсказки /procedure-types/{id}/materials.",
+    "description": "Сквозной сценарий шага 4 с автотестами на демо-учётках: куратор принимает поставку вакцины (просроченная, ближняя и дальняя партии) → вход ветеринара → осмотр с весом → вакцинация без выбора партий (списание по FEFO: партия с ближайшим сроком, просроченные не используются) → остаток уменьшился → флаг «привит» в медкарте и в сводке → ручной выбор не-FEFO партии → просроченную партию выбрать нельзя → нехватка материалов (409, остатки не изменились) → удаление ошибочной кастрации снимает флаг, а у животного, поступившего стерилизованным, флаг остаётся → состояние здоровья «лечение» и обратно → правила и матрица доступа.\nНужны демо-учётки (пароль demo12345): ветеринар lebedev, куратор fedorov, координатор belova — у них есть карточки сотрудников, без которых процедуры не вносятся (409).\nПовторный запуск возможен: животные и клетка создаются заново, ожидаемые партии берутся из подсказки /procedure-types/{id}/materials.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -130,6 +130,50 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
             "url": "{{baseUrl}}/procedure-types"
+          }
+        },
+        {
+          "name": "Куратор: склады",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const warehouses = pm.response.json();",
+            "const medical = warehouses.find(w => w.name === 'Медицинский склад') || warehouses[0];",
+            "pm.collectionVariables.set('supplyWarehouseId', medical.id);"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/warehouses"
+          }
+        },
+        {
+          "name": "Куратор: поставщик",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, есть поставщик', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().length).to.be.above(0); });",
+            "pm.collectionVariables.set('supplierId', pm.response.json()[0].id);",
+            "const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);",
+            "pm.collectionVariables.set('vaccineSupplyDate', day(-100));",
+            "pm.collectionVariables.set('vaccineExpired', day(-1));",
+            "pm.collectionVariables.set('vaccineNear', day(20));",
+            "pm.collectionVariables.set('vaccineFar', day(200));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/suppliers"
+          }
+        },
+        {
+          "name": "Куратор принимает поставку вакцины: просроченная, ближняя и дальняя партии",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "// Своя поставка делает коллекцию независимой от демо-остатков и от «списать все просроченные» (шаг 5)",
+            "pm.test('201, три партии', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().items.length).to.eql(3); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"supplierId\":{{supplierId}},\"warehouseId\":{{supplyWarehouseId}},\"supplyDate\":\"{{vaccineSupplyDate}}\",\"notes\":\"Вакцина для коллекции шага 4\",\"items\":[{\"productId\":{{vaccineProductId}},\"quantity\":3,\"expirationDate\":\"{{vaccineExpired}}\"},{\"productId\":{{vaccineProductId}},\"quantity\":5,\"expirationDate\":\"{{vaccineNear}}\"},{\"productId\":{{vaccineProductId}},\"quantity\":5,\"expirationDate\":\"{{vaccineFar}}\"}]}" },
+            "url": "{{baseUrl}}/supplies"
           }
         },
         {

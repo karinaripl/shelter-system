@@ -186,12 +186,17 @@ public class Warehouse extends TableImpl<WarehouseRecord> {
         return _batchStock;
     }
 
+    private transient ProductBatchPath _productBatch;
+
     /**
-     * Get the implicit many-to-many join path to the
+     * Get the implicit to-many join path to the
      * <code>shelter_schema.product_batch</code> table
      */
     public ProductBatchPath productBatch() {
-        return batchStock().productBatch();
+        if (_productBatch == null)
+            _productBatch = new ProductBatchPath(this, null, Keys.PRODUCT_BATCH__PRODUCT_BATCH_RECEIVED_WAREHOUSE_ID_FKEY.getInverseKey());
+
+        return _productBatch;
     }
 
     @Override

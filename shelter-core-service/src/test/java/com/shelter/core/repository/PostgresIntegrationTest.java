@@ -73,7 +73,9 @@ abstract class PostgresIntegrationTest {
     @BeforeEach
     void cleanTables() {
         dsl.execute("""
-                TRUNCATE shelter_schema.product_expense, shelter_schema.batch_stock, shelter_schema.product_batch,
+                TRUNCATE shelter_schema.stock_transfer, shelter_schema.product_write_off,
+                         shelter_schema.product_expense, shelter_schema.batch_stock, shelter_schema.product_batch,
+                         shelter_schema.donation, shelter_schema.benefactor,
                          shelter_schema.supply, shelter_schema.supplier, shelter_schema.warehouse,
                          shelter_schema.procedure_consumption_rate, shelter_schema.product,
                          shelter_schema.procedure_record, shelter_schema.medical_record,

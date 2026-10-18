@@ -119,6 +119,12 @@ public class ProductBatch extends TableImpl<ProductBatchRecord> {
      */
     public final TableField<ProductBatchRecord, OffsetDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false).defaultValue(DSL.field(DSL.raw("now()"), SQLDataType.TIMESTAMPWITHTIMEZONE)), this, "");
 
+    /**
+     * The column
+     * <code>shelter_schema.product_batch.received_warehouse_id</code>.
+     */
+    public final TableField<ProductBatchRecord, Long> RECEIVED_WAREHOUSE_ID = createField(DSL.name("received_warehouse_id"), SQLDataType.BIGINT, this, "");
+
     private ProductBatch(Name alias, Table<ProductBatchRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
     }
@@ -190,7 +196,7 @@ public class ProductBatch extends TableImpl<ProductBatchRecord> {
 
     @Override
     public List<Index> getIndexes() {
-        return Arrays.asList(Indexes.IDX_BATCH_DONATION, Indexes.IDX_BATCH_EMPLOYEE, Indexes.IDX_BATCH_EXPIRATION, Indexes.IDX_BATCH_PRODUCT, Indexes.IDX_BATCH_SUPPLY);
+        return Arrays.asList(Indexes.IDX_BATCH_DONATION, Indexes.IDX_BATCH_EMPLOYEE, Indexes.IDX_BATCH_EXPIRATION, Indexes.IDX_BATCH_PRODUCT, Indexes.IDX_BATCH_RECEIVED_WAREHOUSE, Indexes.IDX_BATCH_SUPPLY);
     }
 
     @Override
@@ -205,7 +211,7 @@ public class ProductBatch extends TableImpl<ProductBatchRecord> {
 
     @Override
     public List<ForeignKey<ProductBatchRecord, ?>> getReferences() {
-        return Arrays.asList(Keys.PRODUCT_BATCH__PRODUCT_BATCH_DONATION_ID_FKEY, Keys.PRODUCT_BATCH__PRODUCT_BATCH_EMPLOYEE_ID_FKEY, Keys.PRODUCT_BATCH__PRODUCT_BATCH_PRODUCT_ID_FKEY, Keys.PRODUCT_BATCH__PRODUCT_BATCH_SUPPLY_ID_FKEY);
+        return Arrays.asList(Keys.PRODUCT_BATCH__PRODUCT_BATCH_DONATION_ID_FKEY, Keys.PRODUCT_BATCH__PRODUCT_BATCH_EMPLOYEE_ID_FKEY, Keys.PRODUCT_BATCH__PRODUCT_BATCH_PRODUCT_ID_FKEY, Keys.PRODUCT_BATCH__PRODUCT_BATCH_RECEIVED_WAREHOUSE_ID_FKEY, Keys.PRODUCT_BATCH__PRODUCT_BATCH_SUPPLY_ID_FKEY);
     }
 
     private transient DonationPath _donation;
@@ -247,6 +253,19 @@ public class ProductBatch extends TableImpl<ProductBatchRecord> {
         return _product;
     }
 
+    private transient WarehousePath _warehouse;
+
+    /**
+     * Get the implicit join path to the <code>shelter_schema.warehouse</code>
+     * table.
+     */
+    public WarehousePath warehouse() {
+        if (_warehouse == null)
+            _warehouse = new WarehousePath(this, Keys.PRODUCT_BATCH__PRODUCT_BATCH_RECEIVED_WAREHOUSE_ID_FKEY, null);
+
+        return _warehouse;
+    }
+
     private transient SupplyPath _supply;
 
     /**
@@ -271,14 +290,6 @@ public class ProductBatch extends TableImpl<ProductBatchRecord> {
             _batchStock = new BatchStockPath(this, null, Keys.BATCH_STOCK__BATCH_STOCK_BATCH_ID_FKEY.getInverseKey());
 
         return _batchStock;
-    }
-
-    /**
-     * Get the implicit many-to-many join path to the
-     * <code>shelter_schema.warehouse</code> table
-     */
-    public WarehousePath warehouse() {
-        return batchStock().warehouse();
     }
 
     @Override

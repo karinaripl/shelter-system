@@ -20,6 +20,7 @@ import com.shelter.model.generated.shelter.tables.ProductBatch;
 import com.shelter.model.generated.shelter.tables.ProductExpense;
 import com.shelter.model.generated.shelter.tables.ProductWriteOff;
 import com.shelter.model.generated.shelter.tables.SalaryPayment;
+import com.shelter.model.generated.shelter.tables.StockTransfer;
 import com.shelter.model.generated.shelter.tables.Supply;
 import com.shelter.model.generated.shelter.tables.VolunteerAssignment;
 
@@ -50,6 +51,7 @@ public class Indexes {
     public static final Index IDX_BATCH_EMPLOYEE = Internal.createIndex(DSL.name("idx_batch_employee"), ProductBatch.PRODUCT_BATCH, new OrderField[] { ProductBatch.PRODUCT_BATCH.EMPLOYEE_ID }, false);
     public static final Index IDX_BATCH_EXPIRATION = Internal.createIndex(DSL.name("idx_batch_expiration"), ProductBatch.PRODUCT_BATCH, new OrderField[] { ProductBatch.PRODUCT_BATCH.EXPIRATION_DATE }, false);
     public static final Index IDX_BATCH_PRODUCT = Internal.createIndex(DSL.name("idx_batch_product"), ProductBatch.PRODUCT_BATCH, new OrderField[] { ProductBatch.PRODUCT_BATCH.PRODUCT_ID }, false);
+    public static final Index IDX_BATCH_RECEIVED_WAREHOUSE = Internal.createIndex(DSL.name("idx_batch_received_warehouse"), ProductBatch.PRODUCT_BATCH, new OrderField[] { ProductBatch.PRODUCT_BATCH.RECEIVED_WAREHOUSE_ID }, false);
     public static final Index IDX_BATCH_SUPPLY = Internal.createIndex(DSL.name("idx_batch_supply"), ProductBatch.PRODUCT_BATCH, new OrderField[] { ProductBatch.PRODUCT_BATCH.SUPPLY_ID }, false);
     public static final Index IDX_CONSUMPTION_RATE_PRODUCT = Internal.createIndex(DSL.name("idx_consumption_rate_product"), ProcedureConsumptionRate.PROCEDURE_CONSUMPTION_RATE, new OrderField[] { ProcedureConsumptionRate.PROCEDURE_CONSUMPTION_RATE.PRODUCT_ID }, false);
     public static final Index IDX_DONATION_BENEFACTOR = Internal.createIndex(DSL.name("idx_donation_benefactor"), Donation.DONATION, new OrderField[] { Donation.DONATION.BENEFACTOR_ID }, false);
@@ -79,6 +81,12 @@ public class Indexes {
     public static final Index IDX_SUPPLY_SUPPLIER = Internal.createIndex(DSL.name("idx_supply_supplier"), Supply.SUPPLY, new OrderField[] { Supply.SUPPLY.SUPPLIER_ID }, false);
     public static final Index IDX_TRANSACTION_CATEGORY = Internal.createIndex(DSL.name("idx_transaction_category"), FinanceTransaction.FINANCE_TRANSACTION, new OrderField[] { FinanceTransaction.FINANCE_TRANSACTION.CATEGORY }, false);
     public static final Index IDX_TRANSACTION_DATE = Internal.createIndex(DSL.name("idx_transaction_date"), FinanceTransaction.FINANCE_TRANSACTION, new OrderField[] { FinanceTransaction.FINANCE_TRANSACTION.TRANSACTION_DATE }, false);
+    public static final Index IDX_TRANSFER_DATE = Internal.createIndex(DSL.name("idx_transfer_date"), StockTransfer.STOCK_TRANSFER, new OrderField[] { StockTransfer.STOCK_TRANSFER.TRANSFER_DATE }, false);
+    public static final Index IDX_TRANSFER_EMPLOYEE = Internal.createIndex(DSL.name("idx_transfer_employee"), StockTransfer.STOCK_TRANSFER, new OrderField[] { StockTransfer.STOCK_TRANSFER.EMPLOYEE_ID }, false);
+    public static final Index IDX_TRANSFER_FROM_STOCK = Internal.createIndex(DSL.name("idx_transfer_from_stock"), StockTransfer.STOCK_TRANSFER, new OrderField[] { StockTransfer.STOCK_TRANSFER.BATCH_ID, StockTransfer.STOCK_TRANSFER.FROM_WAREHOUSE_ID }, false);
+    public static final Index IDX_TRANSFER_FROM_WAREHOUSE = Internal.createIndex(DSL.name("idx_transfer_from_warehouse"), StockTransfer.STOCK_TRANSFER, new OrderField[] { StockTransfer.STOCK_TRANSFER.FROM_WAREHOUSE_ID }, false);
+    public static final Index IDX_TRANSFER_TO_STOCK = Internal.createIndex(DSL.name("idx_transfer_to_stock"), StockTransfer.STOCK_TRANSFER, new OrderField[] { StockTransfer.STOCK_TRANSFER.BATCH_ID, StockTransfer.STOCK_TRANSFER.TO_WAREHOUSE_ID }, false);
+    public static final Index IDX_TRANSFER_TO_WAREHOUSE = Internal.createIndex(DSL.name("idx_transfer_to_warehouse"), StockTransfer.STOCK_TRANSFER, new OrderField[] { StockTransfer.STOCK_TRANSFER.TO_WAREHOUSE_ID }, false);
     public static final Index IDX_WRITE_OFF_DATE = Internal.createIndex(DSL.name("idx_write_off_date"), ProductWriteOff.PRODUCT_WRITE_OFF, new OrderField[] { ProductWriteOff.PRODUCT_WRITE_OFF.WRITE_OFF_DATE }, false);
     public static final Index IDX_WRITE_OFF_EMPLOYEE = Internal.createIndex(DSL.name("idx_write_off_employee"), ProductWriteOff.PRODUCT_WRITE_OFF, new OrderField[] { ProductWriteOff.PRODUCT_WRITE_OFF.EMPLOYEE_ID }, false);
     public static final Index IDX_WRITE_OFF_STOCK = Internal.createIndex(DSL.name("idx_write_off_stock"), ProductWriteOff.PRODUCT_WRITE_OFF, new OrderField[] { ProductWriteOff.PRODUCT_WRITE_OFF.BATCH_ID, ProductWriteOff.PRODUCT_WRITE_OFF.WAREHOUSE_ID }, false);

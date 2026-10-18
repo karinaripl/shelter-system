@@ -217,7 +217,8 @@ public class ProcedureService {
         List<String> expired = new ArrayList<>();
         List<String> shortages = new ArrayList<>();
         List<MaterialChoice> ordered = choices.stream()
-                .sorted(Comparator.comparing(MaterialChoice::batchId).thenComparing(MaterialChoice::warehouseId))
+                .sorted(Comparator.comparing(MaterialChoice::productId).thenComparing(MaterialChoice::batchId)
+                        .thenComparing(MaterialChoice::warehouseId))
                 .toList();
         for (MaterialChoice choice : ordered) {
             Rate rate = rateByProduct.get(choice.productId());

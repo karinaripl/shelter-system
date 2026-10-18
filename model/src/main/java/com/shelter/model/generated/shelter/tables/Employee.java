@@ -15,6 +15,7 @@ import com.shelter.model.generated.shelter.tables.ProductBatch.ProductBatchPath;
 import com.shelter.model.generated.shelter.tables.ProductExpense.ProductExpensePath;
 import com.shelter.model.generated.shelter.tables.ProductWriteOff.ProductWriteOffPath;
 import com.shelter.model.generated.shelter.tables.SalaryPayment.SalaryPaymentPath;
+import com.shelter.model.generated.shelter.tables.StockTransfer.StockTransferPath;
 import com.shelter.model.generated.shelter.tables.Supply.SupplyPath;
 import com.shelter.model.generated.shelter.tables.records.EmployeeRecord;
 
@@ -340,6 +341,19 @@ public class Employee extends TableImpl<EmployeeRecord> {
             _salaryPayment = new SalaryPaymentPath(this, null, Keys.SALARY_PAYMENT__SALARY_PAYMENT_EMPLOYEE_ID_FKEY.getInverseKey());
 
         return _salaryPayment;
+    }
+
+    private transient StockTransferPath _stockTransfer;
+
+    /**
+     * Get the implicit to-many join path to the
+     * <code>shelter_schema.stock_transfer</code> table
+     */
+    public StockTransferPath stockTransfer() {
+        if (_stockTransfer == null)
+            _stockTransfer = new StockTransferPath(this, null, Keys.STOCK_TRANSFER__STOCK_TRANSFER_EMPLOYEE_ID_FKEY.getInverseKey());
+
+        return _stockTransfer;
     }
 
     private transient SupplyPath _supply;

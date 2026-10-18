@@ -28,6 +28,7 @@ import com.shelter.model.generated.shelter.tables.ProductCategory;
 import com.shelter.model.generated.shelter.tables.ProductExpense;
 import com.shelter.model.generated.shelter.tables.ProductWriteOff;
 import com.shelter.model.generated.shelter.tables.SalaryPayment;
+import com.shelter.model.generated.shelter.tables.StockTransfer;
 import com.shelter.model.generated.shelter.tables.Supplier;
 import com.shelter.model.generated.shelter.tables.Supply;
 import com.shelter.model.generated.shelter.tables.Volunteer;
@@ -177,6 +178,11 @@ public class ShelterSchema extends SchemaImpl {
     public final SalaryPayment SALARY_PAYMENT = SalaryPayment.SALARY_PAYMENT;
 
     /**
+     * The table <code>shelter_schema.stock_transfer</code>.
+     */
+    public final StockTransfer STOCK_TRANSFER = StockTransfer.STOCK_TRANSFER;
+
+    /**
      * The table <code>shelter_schema.supplier</code>.
      */
     public final Supplier SUPPLIER = Supplier.SUPPLIER;
@@ -241,6 +247,7 @@ public class ShelterSchema extends SchemaImpl {
             ProductExpense.PRODUCT_EXPENSE,
             ProductWriteOff.PRODUCT_WRITE_OFF,
             SalaryPayment.SALARY_PAYMENT,
+            StockTransfer.STOCK_TRANSFER,
             Supplier.SUPPLIER,
             Supply.SUPPLY,
             Volunteer.VOLUNTEER,

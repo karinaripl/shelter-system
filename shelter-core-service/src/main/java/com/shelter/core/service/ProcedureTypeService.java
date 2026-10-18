@@ -1,6 +1,8 @@
 package com.shelter.core.service;
 
+import com.shelter.core.dto.BatchOption;
 import com.shelter.core.dto.ConsumptionRateRequest;
+import com.shelter.core.dto.ExpiredBatch;
 import com.shelter.core.dto.ProcedureMaterialsResponse;
 import com.shelter.core.dto.ProcedureTypeRequest;
 import com.shelter.core.dto.ProcedureTypeResponse;
@@ -24,7 +26,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.IntStream;
 
 /** Виды процедур и нормы расхода: читают ADMIN, VET, CURATOR; изменяют ADMIN и VET. */
 @Service
@@ -74,19 +75,9 @@ public class ProcedureTypeService {
     }
 
     private static ProcedureMaterialsResponse.Material material(Rate rate, List<StockRow> rows, LocalDate today) {
-        List<StockRow> usable = FefoAllocator.usable(rows, today);
-        BigDecimal available = FefoAllocator.total(usable);
-        List<ProcedureMaterialsResponse.BatchOption> batches = IntStream.range(0, usable.size())
-                .mapToObj(i -> {
-                    StockRow r = usable.get(i);
-                    return new ProcedureMaterialsResponse.BatchOption(r.batchId(), r.warehouseId(), r.warehouseName(),
-                            r.receivedDate(), r.expirationDate(), r.quantity(), i == 0);
-                })
-                .toList();
-        List<ProcedureMaterialsResponse.ExpiredBatch> expired = FefoAllocator.expired(rows, today).stream()
-                .map(r -> new ProcedureMaterialsResponse.ExpiredBatch(r.batchId(), r.warehouseId(), r.warehouseName(),
-                        r.expirationDate(), r.quantity(), ProcedureMaterialsResponse.EXPIRED_NOTE))
-                .toList();
+        BigDecimal available = FefoAllocator.total(FefoAllocator.usable(rows, today));
+        List<BatchOption> batches = StockHints.options(rows, today);
+        List<ExpiredBatch> expired = StockHints.expired(rows, today);
         return new ProcedureMaterialsResponse.Material(rate.productId(), rate.productName(), rate.unit(),
                 rate.quantity(), available, available.compareTo(rate.quantity()) >= 0, batches, expired);
     }

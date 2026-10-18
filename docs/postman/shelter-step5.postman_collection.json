@@ -1,0 +1,816 @@
+{
+  "info": {
+    "name": "Shelter — шаг 5: склад",
+    "description": "Сквозной сценарий шага 5 с автотестами на демо-учётках (пароль demo12345; администратор — admin@shelter.local / admin12345): куратор заводит товар → поставка с двумя партиями (цен и суммы куратор не видит, администратор видит) → остатки выросли → ручной расход с выбором не-FEFO партии → расход больше остатка (409) → расход по FEFO → удаление ошибочного расхода → перемещение на другой склад → списание испорченного → поставка с просроченной партией → её нельзя расходовать (409) → предпросмотр и списание всех просроченных → отчёт «к списанию» пуст → натуральное пожертвование → отчёты: ниже минимума, остатки, истекающие, движение товара. Плюс правила справочников и матрица доступа.\nПовторный запуск возможен: товар создаётся заново на каждый прогон.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8766" },
+    { "key": "curatorEmail", "value": "fedorov@demo.shelter.local" },
+    { "key": "vetEmail", "value": "lebedev@demo.shelter.local" },
+    { "key": "coordinatorEmail", "value": "belova@demo.shelter.local" },
+    { "key": "demoPassword", "value": "demo12345" },
+    { "key": "adminEmail", "value": "admin@shelter.local" },
+    { "key": "adminPassword", "value": "admin12345" }
+  ],
+  "item": [
+    {
+      "name": "Подготовка",
+      "item": [
+        {
+          "name": "Вход куратора",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "// Новый суффикс на каждый прогон и даты относительно сегодняшнего дня (UTC, как на сервере)",
+              "pm.collectionVariables.set('run', Date.now().toString(36));",
+              "const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);",
+              "pm.collectionVariables.set('today', day(0));",
+              "pm.collectionVariables.set('tomorrow', day(1));",
+              "pm.collectionVariables.set('nearExpiration', day(30));",
+              "pm.collectionVariables.set('farExpiration', day(200));",
+              "pm.collectionVariables.set('oldSupplyDate', day(-60));",
+              "pm.collectionVariables.set('yesterday', day(-1));"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('curatorToken', pm.response.json().token);"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{curatorEmail}}\",\"password\":\"{{demoPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Вход ветеринара",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('vetToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{vetEmail}}\",\"password\":\"{{demoPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Вход координатора",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('coordinatorToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{coordinatorEmail}}\",\"password\":\"{{demoPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Вход администратора",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('adminToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{adminEmail}}\",\"password\":\"{{adminPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Куратор: категории товаров",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('categoryId', pm.response.json().find(c => c.name === 'Корм').id);"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/product-categories"
+          }
+        },
+        {
+          "name": "Куратор: склады",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, не меньше двух складов', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().length).to.be.at.least(2); });",
+            "const warehouses = pm.response.json();",
+            "const main = warehouses.find(w => w.name === 'Основной склад') || warehouses[0];",
+            "const other = warehouses.find(w => w.id !== main.id);",
+            "pm.collectionVariables.set('mainWarehouseId', main.id);",
+            "pm.collectionVariables.set('otherWarehouseId', other.id);"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/warehouses"
+          }
+        },
+        {
+          "name": "Куратор: поставщики",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, есть поставщик', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().length).to.be.above(0); });",
+            "pm.collectionVariables.set('supplierId', pm.response.json()[0].id);"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/suppliers"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Сценарий: товар, поставка, расход, списание",
+      "item": [
+        {
+          "name": "Куратор заводит товар с минимальным остатком",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201, в обороте, минимум 50', () => {",
+            "  pm.response.to.have.status(201);",
+            "  pm.expect(pm.response.json().active).to.eql(true);",
+            "  pm.expect(pm.response.json().minStock).to.eql(50);",
+            "  pm.expect(pm.response.json().category.name).to.eql('Корм');",
+            "});",
+            "pm.collectionVariables.set('productId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Корм тестовый {{run}}\",\"categoryId\":{{categoryId}},\"unitOfMeasure\":\"кг\",\"minStock\":50}" },
+            "url": "{{baseUrl}}/products"
+          }
+        },
+        {
+          "name": "Негатив: товар с тем же названием → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Сообщение на русском', () => pm.expect(pm.response.json().message).to.include('уже есть'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"корм тестовый {{run}}\",\"categoryId\":{{categoryId}},\"unitOfMeasure\":\"кг\"}" },
+            "url": "{{baseUrl}}/products"
+          }
+        },
+        {
+          "name": "Поставка с двумя партиями: куратор не видит цены и сумму",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const s = pm.response.json();",
+            "pm.test('Две партии, поставка не оплачена', () => { pm.expect(s.items.length).to.eql(2); pm.expect(s.paid).to.eql(false); });",
+            "pm.test('Суммы поставки нет в ответе', () => pm.expect(s).to.not.have.property('totalAmount'));",
+            "pm.test('Цен позиций нет в ответе', () => s.items.forEach(i => pm.expect(i).to.not.have.property('unitPrice')));",
+            "pm.test('Принял текущий сотрудник', () => pm.expect(s.employee.fullName).to.eql('Фёдоров Максим Олегович'));",
+            "pm.collectionVariables.set('supplyId', s.id);",
+            "pm.collectionVariables.set('nearBatchId', s.items[0].batchId);",
+            "pm.collectionVariables.set('farBatchId', s.items[1].batchId);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"supplierId\":{{supplierId}},\"warehouseId\":{{mainWarehouseId}},\"notes\":\"Накладная {{run}}\",\"items\":[{\"productId\":{{productId}},\"quantity\":20,\"unitPrice\":300,\"expirationDate\":\"{{nearExpiration}}\"},{\"productId\":{{productId}},\"quantity\":15,\"unitPrice\":320,\"expirationDate\":\"{{farExpiration}}\"}]}" },
+            "url": "{{baseUrl}}/supplies"
+          }
+        },
+        {
+          "name": "Администратор видит цены и сумму поставки",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('Сумма = 20 × 300 + 15 × 320 = 10800', () => pm.expect(pm.response.json().totalAmount).to.eql(10800));",
+            "pm.test('Цены позиций видны', () => pm.expect(pm.response.json().items[0].unitPrice).to.eql(300));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/supplies/{{supplyId}}"
+          }
+        },
+        {
+          "name": "Остатки выросли: подсказка FEFO",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const s = pm.response.json();",
+            "pm.test('Всего 35 кг, все годные', () => { pm.expect(s.totalQuantity).to.eql(35); pm.expect(s.usableQuantity).to.eql(35); });",
+            "pm.test('Рекомендуемая — партия с ближайшим сроком', () => {",
+            "  pm.expect(s.batches[0].batchId).to.eql(pm.collectionVariables.get('nearBatchId'));",
+            "  pm.expect(s.batches[0].recommended).to.eql(true);",
+            "  pm.expect(s.batches[1].recommended).to.eql(false);",
+            "});",
+            "pm.test('Без цен', () => s.batches.forEach(b => pm.expect(b).to.not.have.property('unitPrice')));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/products/{{productId}}/stock?warehouseId={{mainWarehouseId}}"
+          }
+        },
+        {
+          "name": "Ручной расход: куратор выбирает не-FEFO партию",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const r = pm.response.json();",
+            "pm.test('Партия выбрана вручную и списана именно она', () => {",
+            "  pm.expect(r.selection).to.eql('MANUAL');",
+            "  pm.expect(r.expenses.length).to.eql(1);",
+            "  pm.expect(r.expenses[0].batchId).to.eql(pm.collectionVariables.get('farBatchId'));",
+            "  pm.expect(r.expenses[0].quantity).to.eql(5);",
+            "});",
+            "pm.collectionVariables.set('manualExpenseId', r.expenses[0].id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"productId\":{{productId}},\"warehouseId\":{{mainWarehouseId}},\"batchId\":{{farBatchId}},\"quantity\":5,\"notes\":\"Кормление\"}" },
+            "url": "{{baseUrl}}/expenses"
+          }
+        },
+        {
+          "name": "Остатки: уменьшилась выбранная партия",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json().batches;",
+            "const qty = (id) => b.find(x => x.batchId === pm.collectionVariables.get(id)).quantity;",
+            "pm.test('Дальняя партия 15 − 5 = 10, ближняя не тронута (20)', () => { pm.expect(qty('farBatchId')).to.eql(10); pm.expect(qty('nearBatchId')).to.eql(20); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/products/{{productId}}/stock?warehouseId={{mainWarehouseId}}"
+          }
+        },
+        {
+          "name": "Негатив: расход больше остатка партии → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Нужно / есть', () => pm.expect(pm.response.json().message).to.include('нужно 25 кг, есть 20 кг'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"productId\":{{productId}},\"warehouseId\":{{mainWarehouseId}},\"batchId\":{{nearBatchId}},\"quantity\":25}" },
+            "url": "{{baseUrl}}/expenses"
+          }
+        },
+        {
+          "name": "Негатив: расход больше остатка на складе (FEFO) → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Нужно / есть', () => pm.expect(pm.response.json().message).to.include('нужно 1000 кг, есть 30 кг'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"productId\":{{productId}},\"warehouseId\":{{mainWarehouseId}},\"quantity\":1000}" },
+            "url": "{{baseUrl}}/expenses"
+          }
+        },
+        {
+          "name": "Расход без выбора партии — по FEFO",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201, FEFO, ближняя партия', () => {",
+            "  pm.response.to.have.status(201);",
+            "  pm.expect(pm.response.json().selection).to.eql('FEFO');",
+            "  pm.expect(pm.response.json().expenses[0].batchId).to.eql(pm.collectionVariables.get('nearBatchId'));",
+            "});"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"productId\":{{productId}},\"warehouseId\":{{mainWarehouseId}},\"quantity\":2}" },
+            "url": "{{baseUrl}}/expenses"
+          }
+        },
+        {
+          "name": "Удаление ошибочного расхода",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('204', () => pm.response.to.have.status(204));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/expenses/{{manualExpenseId}}"
+          }
+        },
+        {
+          "name": "Количество вернулось в ту же партию",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json().batches;",
+            "const qty = (id) => b.find(x => x.batchId === pm.collectionVariables.get(id)).quantity;",
+            "pm.test('Дальняя партия снова 15, ближняя 18', () => { pm.expect(qty('farBatchId')).to.eql(15); pm.expect(qty('nearBatchId')).to.eql(18); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/products/{{productId}}/stock?warehouseId={{mainWarehouseId}}"
+          }
+        },
+        {
+          "name": "Перемещение 3 кг на другой склад",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.test('Со склада на склад', () => {",
+            "  pm.expect(pm.response.json().fromWarehouse.id).to.eql(pm.collectionVariables.get('mainWarehouseId'));",
+            "  pm.expect(pm.response.json().toWarehouse.id).to.eql(pm.collectionVariables.get('otherWarehouseId'));",
+            "});"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"batchId\":{{nearBatchId}},\"fromWarehouseId\":{{mainWarehouseId}},\"toWarehouseId\":{{otherWarehouseId}},\"quantity\":3,\"notes\":\"Запас в карантин\"}" },
+            "url": "{{baseUrl}}/stock-transfers"
+          }
+        },
+        {
+          "name": "Списание испорченного",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201, причина DAMAGED', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().reason).to.eql('DAMAGED'); });",
+            "pm.test('Списал текущий сотрудник', () => pm.expect(pm.response.json().employee.fullName).to.eql('Фёдоров Максим Олегович'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"batchId\":{{farBatchId}},\"warehouseId\":{{mainWarehouseId}},\"quantity\":2,\"reason\":\"DAMAGED\",\"notes\":\"Порван мешок\"}" },
+            "url": "{{baseUrl}}/write-offs"
+          }
+        },
+        {
+          "name": "Негатив: причина «истёк срок» для годной партии → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Сообщение', () => pm.expect(pm.response.json().message).to.include('не просрочена'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"batchId\":{{farBatchId}},\"warehouseId\":{{mainWarehouseId}},\"quantity\":1,\"reason\":\"EXPIRED\"}" },
+            "url": "{{baseUrl}}/write-offs"
+          }
+        },
+        {
+          "name": "Негатив: срок годности не позже даты прихода → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('Сообщение', () => pm.expect(pm.response.json().message).to.include('позже даты прихода'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"supplierId\":{{supplierId}},\"warehouseId\":{{mainWarehouseId}},\"items\":[{\"productId\":{{productId}},\"quantity\":1,\"expirationDate\":\"{{today}}\"}]}" },
+            "url": "{{baseUrl}}/supplies"
+          }
+        },
+        {
+          "name": "Негатив: поставка датой из будущего → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"supplierId\":{{supplierId}},\"warehouseId\":{{mainWarehouseId}},\"supplyDate\":\"{{tomorrow}}\",\"items\":[{\"productId\":{{productId}},\"quantity\":1}]}" },
+            "url": "{{baseUrl}}/supplies"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Просроченные партии",
+      "item": [
+        {
+          "name": "Поставка задним числом с уже просроченной партией",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('expiredBatchId', pm.response.json().items[0].batchId);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"supplierId\":{{supplierId}},\"warehouseId\":{{mainWarehouseId}},\"supplyDate\":\"{{oldSupplyDate}}\",\"items\":[{\"productId\":{{productId}},\"quantity\":4,\"expirationDate\":\"{{yesterday}}\"}]}" },
+            "url": "{{baseUrl}}/supplies"
+          }
+        },
+        {
+          "name": "Подсказка: просроченная партия отдельно, с пометкой",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const s = pm.response.json();",
+            "pm.test('Среди годных её нет', () => pm.expect(s.batches.map(b => b.batchId)).to.not.include(pm.collectionVariables.get('expiredBatchId')));",
+            "pm.test('В просроченных — с пометкой «подлежит списанию»', () => {",
+            "  const e = s.expiredBatches.find(b => b.batchId === pm.collectionVariables.get('expiredBatchId'));",
+            "  pm.expect(e.note).to.eql('просрочено — подлежит списанию');",
+            "});"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/products/{{productId}}/stock?warehouseId={{mainWarehouseId}}"
+          }
+        },
+        {
+          "name": "Негатив: просроченная партия в расходе → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Партию нужно списать', () => pm.expect(pm.response.json().message).to.include('Партия просрочена, её нужно списать'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"productId\":{{productId}},\"warehouseId\":{{mainWarehouseId}},\"batchId\":{{expiredBatchId}},\"quantity\":1}" },
+            "url": "{{baseUrl}}/expenses"
+          }
+        },
+        {
+          "name": "Отчёт «к списанию» содержит партию",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('Наша партия, срок истёк вчера', () => {",
+            "  const e = pm.response.json().find(b => b.batchId === pm.collectionVariables.get('expiredBatchId'));",
+            "  pm.expect(e.daysLeft).to.eql(-1); pm.expect(e.quantity).to.eql(4);",
+            "});"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/reports/expired"
+          }
+        },
+        {
+          "name": "Предпросмотр «списать все просроченные»",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const p = pm.response.json();",
+            "pm.test('Есть token и наша партия с количеством', () => {",
+            "  pm.expect(p.token).to.be.a('string');",
+            "  pm.expect(p.items.find(i => i.batchId === pm.collectionVariables.get('expiredBatchId')).quantity).to.eql(4);",
+            "});",
+            "pm.collectionVariables.set('previewToken', p.token);",
+            "pm.collectionVariables.set('previewCount', p.items.length);"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/write-offs/expired/preview"
+          }
+        },
+        {
+          "name": "Негатив: подтверждение с чужим token → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Нужно обновить предпросмотр', () => pm.expect(pm.response.json().message).to.include('обновите предпросмотр'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"token\":\"устаревший\"}" },
+            "url": "{{baseUrl}}/write-offs/expired"
+          }
+        },
+        {
+          "name": "Подтверждение: списано всё из предпросмотра",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.test('Списано столько строк, сколько было в предпросмотре', () => pm.expect(pm.response.json().length).to.eql(pm.collectionVariables.get('previewCount')));",
+            "pm.test('Причина — истёк срок', () => pm.response.json().forEach(w => pm.expect(w.reason).to.eql('EXPIRED')));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"token\":\"{{previewToken}}\",\"notes\":\"Утилизация по акту\"}" },
+            "url": "{{baseUrl}}/write-offs/expired"
+          }
+        },
+        {
+          "name": "Отчёт «к списанию» пуст",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, пусто', () => { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.eql([]); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/reports/expired"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Пожертвование и отчёты",
+      "item": [
+        {
+          "name": "Благотворители для формы: только имена",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('Только id и имя, без контактов', () => pm.response.json().forEach(b => pm.expect(Object.keys(b).sort()).to.eql(['fullName', 'id'])));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/benefactors"
+          }
+        },
+        {
+          "name": "Натуральное пожертвование от нового благотворителя",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const d = pm.response.json();",
+            "pm.test('Благотворитель создан по имени', () => pm.expect(d.benefactor.fullName).to.eql('Иван Тестов ' + pm.collectionVariables.get('run')));",
+            "pm.test('Партия без цены', () => { pm.expect(d.items.length).to.eql(1); pm.expect(d.items[0]).to.not.have.property('unitPrice'); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"benefactorName\":\"Иван Тестов {{run}}\",\"warehouseId\":{{mainWarehouseId}},\"notes\":\"Привёз в приют\",\"items\":[{\"productId\":{{productId}},\"quantity\":5}]}" },
+            "url": "{{baseUrl}}/goods-donations"
+          }
+        },
+        {
+          "name": "Негатив: цена в натуральном пожертвовании → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"warehouseId\":{{mainWarehouseId}},\"items\":[{\"productId\":{{productId}},\"quantity\":5,\"unitPrice\":10}]}" },
+            "url": "{{baseUrl}}/goods-donations"
+          }
+        },
+        {
+          "name": "Отчёт «ниже минимума»: годных 36 при минимуме 50",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "// 20 + 15 − 2 (FEFO) − 2 (испорчено) + 5 (пожертвование) = 36; просроченные 4 кг списаны",
+            "pm.test('Наш товар: 36 из 50, не хватает 14', () => {",
+            "  const i = pm.response.json().find(x => x.productId === pm.collectionVariables.get('productId'));",
+            "  pm.expect(i.usableQuantity).to.eql(36); pm.expect(i.minStock).to.eql(50); pm.expect(i.shortage).to.eql(14);",
+            "});"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/reports/below-minimum"
+          }
+        },
+        {
+          "name": "Отчёт остатков: по складам, без сумм",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const i = pm.response.json().find(x => x.productId === pm.collectionVariables.get('productId'));",
+            "pm.test('Всего 36, на двух складах', () => { pm.expect(i.totalQuantity).to.eql(36); pm.expect(i.warehouses.length).to.eql(2); });",
+            "pm.test('На другом складе 3 кг', () => pm.expect(i.warehouses.find(w => w.warehouseId === pm.collectionVariables.get('otherWarehouseId')).totalQuantity).to.eql(3));",
+            "pm.test('Сумм денег нет', () => { const json = pm.response.text(); ['price', 'amount', 'cost'].forEach(k => pm.expect(json.toLowerCase()).to.not.include(k)); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/reports/stock"
+          }
+        },
+        {
+          "name": "Отчёт истекающих партий (60 дней)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('Ближняя партия (срок через 30 дней) есть, дальней нет', () => {",
+            "  const ids = pm.response.json().map(b => b.batchId);",
+            "  pm.expect(ids).to.include(pm.collectionVariables.get('nearBatchId'));",
+            "  pm.expect(ids).to.not.include(pm.collectionVariables.get('farBatchId'));",
+            "});",
+            "pm.test('Ближайшие первыми', () => { const d = pm.response.json().map(b => b.expirationDate); pm.expect(d).to.eql([...d].sort()); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/reports/expiring?days=60"
+          }
+        },
+        {
+          "name": "Движение товара за период",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const m = pm.response.json();",
+            "pm.test('Приход 20 + 15 + 4 + 5 = 44, расход 2, списание 2 + 4 = 6', () => {",
+            "  pm.expect(m.received).to.eql(44); pm.expect(m.consumed).to.eql(2); pm.expect(m.writtenOff).to.eql(6);",
+            "});",
+            "pm.test('Остаток на конец = начало + приход − расход − списание = 36', () => pm.expect(m.closingBalance).to.eql(m.openingBalance + 36));",
+            "pm.test('В операциях есть все типы', () => ['RECEIPT', 'EXPENSE', 'WRITE_OFF', 'TRANSFER'].forEach(t => pm.expect(m.operations.map(o => o.type)).to.include(t)));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/reports/movements?productId={{productId}}&from={{oldSupplyDate}}&to={{today}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Правила и матрица доступа",
+      "item": [
+        {
+          "name": "Расход по процедуре из журнала",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const e = pm.response.json().content.find(x => x.procedureId !== null);",
+            "pm.test('Есть расход по процедуре (демо-данные или шаг 4)', () => pm.expect(e).to.not.eql(undefined));",
+            "pm.collectionVariables.set('procedureExpenseId', e.id);"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/expenses?size=100"
+          }
+        },
+        {
+          "name": "Негатив: удаление расхода от процедуры → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Удалять через процедуру', () => pm.expect(pm.response.json().message).to.include('удаляется только вместе с процедурой'));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/expenses/{{procedureExpenseId}}"
+          }
+        },
+        {
+          "name": "Негатив: удалить товар с партиями → 409 (подсказка про архив)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Подсказка про архив', () => pm.expect(pm.response.json().message).to.include('архив'));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/products/{{productId}}"
+          }
+        },
+        {
+          "name": "Товар в архив",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, в архиве', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().active).to.eql(false); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"active\":false}" },
+            "url": "{{baseUrl}}/products/{{productId}}/active"
+          }
+        },
+        {
+          "name": "Негатив: поставка архивного товара → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Сообщение про архив', () => pm.expect(pm.response.json().message).to.include('в архиве'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"supplierId\":{{supplierId}},\"warehouseId\":{{mainWarehouseId}},\"items\":[{\"productId\":{{productId}},\"quantity\":1}]}" },
+            "url": "{{baseUrl}}/supplies"
+          }
+        },
+        {
+          "name": "Остатки архивного товара можно расходовать",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"productId\":{{productId}},\"warehouseId\":{{mainWarehouseId}},\"quantity\":1}" },
+            "url": "{{baseUrl}}/expenses"
+          }
+        },
+        {
+          "name": "Негатив: удалить склад с остатками → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/warehouses/{{mainWarehouseId}}"
+          }
+        },
+        {
+          "name": "Негатив: удалить поставщика с поставками → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/suppliers/{{supplierId}}"
+          }
+        },
+        {
+          "name": "Негатив: удалить поставку с движением по партиям → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/supplies/{{supplyId}}"
+          }
+        },
+        {
+          "name": "Ветеринар создаёт поставку → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));",
+            "pm.test('Общий формат ошибки', () => pm.expect(pm.response.json().message).to.eql('Недостаточно прав для этого действия'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"supplierId\":{{supplierId}},\"warehouseId\":{{mainWarehouseId}},\"items\":[{\"productId\":{{productId}},\"quantity\":1}]}" },
+            "url": "{{baseUrl}}/supplies"
+          }
+        },
+        {
+          "name": "Ветеринар смотрит поставки → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/supplies"
+          }
+        },
+        {
+          "name": "Ветеринар оформляет ручной расход → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"productId\":{{productId}},\"warehouseId\":{{mainWarehouseId}},\"quantity\":1}" },
+            "url": "{{baseUrl}}/expenses"
+          }
+        },
+        {
+          "name": "Ветеринар читает остатки товара → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/products/{{productId}}/stock"
+          }
+        },
+        {
+          "name": "Координатор смотрит склад → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/products"
+          }
+        },
+        {
+          "name": "Координатор смотрит отчёт остатков → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/reports/stock"
+          }
+        },
+        {
+          "name": "Координатор смотрит благотворителей → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/benefactors"
+          }
+        },
+        {
+          "name": "Без токена → склады → 401",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/warehouses"
+          }
+        }
+      ]
+    }
+  ]
+}

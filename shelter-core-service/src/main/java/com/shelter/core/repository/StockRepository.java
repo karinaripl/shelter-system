@@ -59,21 +59,35 @@ public class StockRepository {
 
     /** Строки остатков товара с ненулевым количеством в порядке FEFO (ближайший срок годности первым). */
     public List<StockRow> findByProduct(Long productId) {
+        return findByProduct(productId, null);
+    }
+
+    /** То же на одном складе (warehouseId = null — на всех складах). */
+    public List<StockRow> findByProduct(Long productId, Long warehouseId) {
         return selectStock()
                 .where(PRODUCT_BATCH.PRODUCT_ID.eq(productId))
+                .and(warehouseId == null ? DSL.noCondition() : BATCH_STOCK.WAREHOUSE_ID.eq(warehouseId))
                 .and(BATCH_STOCK.QUANTITY.gt(BigDecimal.ZERO))
                 .orderBy(PRODUCT_BATCH.EXPIRATION_DATE.asc().nullsLast(), PRODUCT_BATCH.RECEIVED_DATE.asc(),
                         BATCH_STOCK.BATCH_ID.asc(), BATCH_STOCK.WAREHOUSE_ID.asc())
                 .fetch(StockRepository::toStock);
     }
 
-    /** То же, с блокировкой строк остатков до конца транзакции (списание по процедуре). */
+    /**
+     * Строки остатков товара с блокировкой до конца транзакции (списание по процедуре, расход по FEFO).
+     * Все операции блокируют строки в одном порядке — товар, партия, склад, — чтобы параллельные
+     * операции не ждали друг друга по кругу; порядок FEFO вычисляется уже после блокировки.
+     */
     public List<StockRow> lockByProduct(Long productId) {
+        return lockByProduct(productId, null);
+    }
+
+    public List<StockRow> lockByProduct(Long productId, Long warehouseId) {
         return selectStock()
                 .where(PRODUCT_BATCH.PRODUCT_ID.eq(productId))
+                .and(warehouseId == null ? DSL.noCondition() : BATCH_STOCK.WAREHOUSE_ID.eq(warehouseId))
                 .and(BATCH_STOCK.QUANTITY.gt(BigDecimal.ZERO))
-                .orderBy(PRODUCT_BATCH.EXPIRATION_DATE.asc().nullsLast(), PRODUCT_BATCH.RECEIVED_DATE.asc(),
-                        BATCH_STOCK.BATCH_ID.asc(), BATCH_STOCK.WAREHOUSE_ID.asc())
+                .orderBy(BATCH_STOCK.BATCH_ID.asc(), BATCH_STOCK.WAREHOUSE_ID.asc())
                 .forUpdate().of(BATCH_STOCK)
                 .fetch(StockRepository::toStock);
     }
@@ -85,6 +99,42 @@ public class StockRepository {
                 .and(BATCH_STOCK.WAREHOUSE_ID.eq(warehouseId))
                 .forUpdate().of(BATCH_STOCK)
                 .fetchOptional(StockRepository::toStock);
+    }
+
+    public Optional<StockRow> findRow(Long batchId, Long warehouseId) {
+        return selectStock()
+                .where(BATCH_STOCK.BATCH_ID.eq(batchId))
+                .and(BATCH_STOCK.WAREHOUSE_ID.eq(warehouseId))
+                .fetchOptional(StockRepository::toStock);
+    }
+
+    /** Создаёт нулевую строку остатка партии на складе, если её нет (перемещение на новый склад). */
+    public void ensureRow(Long batchId, Long warehouseId) {
+        dsl.insertInto(BATCH_STOCK)
+                .set(BATCH_STOCK.BATCH_ID, batchId)
+                .set(BATCH_STOCK.WAREHOUSE_ID, warehouseId)
+                .set(BATCH_STOCK.QUANTITY, BigDecimal.ZERO)
+                .onConflictDoNothing()
+                .execute();
+    }
+
+    /** Все строки остатков просроченных партий (срок раньше today) с ненулевым количеством. */
+    public List<StockRow> findExpired(LocalDate today) {
+        return selectStock()
+                .where(PRODUCT_BATCH.EXPIRATION_DATE.lt(today))
+                .and(BATCH_STOCK.QUANTITY.gt(BigDecimal.ZERO))
+                .orderBy(PRODUCT_BATCH.PRODUCT_ID, BATCH_STOCK.BATCH_ID, BATCH_STOCK.WAREHOUSE_ID)
+                .fetch(StockRepository::toStock);
+    }
+
+    /** То же с блокировкой (списание всех просроченных), в общем порядке блокировки. */
+    public List<StockRow> lockExpired(LocalDate today) {
+        return selectStock()
+                .where(PRODUCT_BATCH.EXPIRATION_DATE.lt(today))
+                .and(BATCH_STOCK.QUANTITY.gt(BigDecimal.ZERO))
+                .orderBy(PRODUCT_BATCH.PRODUCT_ID, BATCH_STOCK.BATCH_ID, BATCH_STOCK.WAREHOUSE_ID)
+                .forUpdate().of(BATCH_STOCK)
+                .fetch(StockRepository::toStock);
     }
 
     public void decrease(Long batchId, Long warehouseId, BigDecimal quantity) {
@@ -106,9 +156,9 @@ public class StockRepository {
 
     // ---------- расход по процедуре ----------
 
-    public void insertExpense(Long batchId, Long warehouseId, Long employeeId, Long animalId, Long procedureId,
+    public Long insertExpense(Long batchId, Long warehouseId, Long employeeId, Long animalId, Long procedureId,
                               BigDecimal quantity, LocalDate expenseDate, String notes) {
-        dsl.insertInto(PRODUCT_EXPENSE)
+        return dsl.insertInto(PRODUCT_EXPENSE)
                 .set(PRODUCT_EXPENSE.BATCH_ID, batchId)
                 .set(PRODUCT_EXPENSE.WAREHOUSE_ID, warehouseId)
                 .set(PRODUCT_EXPENSE.EMPLOYEE_ID, employeeId)
@@ -117,7 +167,8 @@ public class StockRepository {
                 .set(PRODUCT_EXPENSE.QUANTITY, quantity)
                 .set(PRODUCT_EXPENSE.EXPENSE_DATE, expenseDate)
                 .set(PRODUCT_EXPENSE.NOTES, notes)
-                .execute();
+                .returning(PRODUCT_EXPENSE.ID)
+                .fetchOne(PRODUCT_EXPENSE.ID);
     }
 
     /** Материалы, списанные по процедурам, сгруппированные по id процедуры. */

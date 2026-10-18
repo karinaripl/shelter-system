@@ -28,6 +28,7 @@ import com.shelter.model.generated.shelter.tables.ProductCategory;
 import com.shelter.model.generated.shelter.tables.ProductExpense;
 import com.shelter.model.generated.shelter.tables.ProductWriteOff;
 import com.shelter.model.generated.shelter.tables.SalaryPayment;
+import com.shelter.model.generated.shelter.tables.StockTransfer;
 import com.shelter.model.generated.shelter.tables.Supplier;
 import com.shelter.model.generated.shelter.tables.Supply;
 import com.shelter.model.generated.shelter.tables.Volunteer;
@@ -160,6 +161,11 @@ public class Tables {
      * The table <code>shelter_schema.salary_payment</code>.
      */
     public static final SalaryPayment SALARY_PAYMENT = SalaryPayment.SALARY_PAYMENT;
+
+    /**
+     * The table <code>shelter_schema.stock_transfer</code>.
+     */
+    public static final StockTransfer STOCK_TRANSFER = StockTransfer.STOCK_TRANSFER;
 
     /**
      * The table <code>shelter_schema.supplier</code>.
