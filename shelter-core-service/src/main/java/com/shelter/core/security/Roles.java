@@ -21,7 +21,16 @@ public final class Roles {
     /** Медицинское состояние животного. */
     public static final String HEALTH_WRITE = "hasAnyRole('ADMIN', 'VET')";
 
-    /** Выбытие: ветеринар — только «умер» (проверяется в сервисе). */
+    /** Полная медкарта: осмотры, диагнозы, процедуры, флаги. */
+    public static final String MEDICAL = "hasAnyRole('ADMIN', 'VET')";
+
+    /** Виды процедур и нормы расхода: чтение. */
+    public static final String PROCEDURE_TYPES_READ = "hasAnyRole('ADMIN', 'VET', 'CURATOR')";
+
+    /** Виды процедур и нормы расхода: изменение. */
+    public static final String PROCEDURE_TYPES_WRITE = "hasAnyRole('ADMIN', 'VET')";
+
+    /** Выбытие:ветеринар — только «умер» (проверяется в сервисе). */
     public static final String DEPARTURE_WRITE = "hasAnyRole('ADMIN', 'CURATOR', 'VET')";
 
     /** Фото животных: изменение. */

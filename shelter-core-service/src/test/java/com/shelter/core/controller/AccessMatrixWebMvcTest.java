@@ -5,6 +5,10 @@ import com.shelter.core.service.AnimalService;
 import com.shelter.core.service.CageService;
 import com.shelter.core.service.DictionaryService;
 import com.shelter.core.service.EmployeeService;
+import com.shelter.core.service.MedicalCardService;
+import com.shelter.core.service.MedicalRecordService;
+import com.shelter.core.service.ProcedureService;
+import com.shelter.core.service.ProcedureTypeService;
 import com.shelter.core.service.PublicCatalogService;
 import com.shelter.gatewayauth.config.GatewayAuthAutoConfiguration;
 import com.shelter.gatewayauth.filter.GatewayAuthFilter;
@@ -51,6 +55,8 @@ class AccessMatrixWebMvcTest {
     private static final Set<String> STAFF = Set.of("ADMIN", "VET", "CURATOR", "ADOPTION_MANAGER", "COORDINATOR");
     private static final Set<String> ANIMALS_WRITE = Set.of("ADMIN", "CURATOR");
     private static final Set<String> PHOTOS_WRITE = Set.of("ADMIN", "CURATOR", "ADOPTION_MANAGER");
+    private static final Set<String> MEDICAL = Set.of("ADMIN", "VET");
+    private static final Set<String> PROCEDURE_TYPES_READ = Set.of("ADMIN", "VET", "CURATOR");
 
     /** Эндпоинт и роли, которым он разрешён. Тела запросов валидны: иначе запрещённая роль получила бы 400. */
     record Endpoint(HttpMethod method, String path, String body, boolean multipart, Set<String> allowed) {
@@ -88,6 +94,31 @@ class AccessMatrixWebMvcTest {
                 new Endpoint(HttpMethod.POST, "/animals/1/photos", null, true, PHOTOS_WRITE),
                 new Endpoint(HttpMethod.DELETE, "/animals/1/photos/2", null, false, PHOTOS_WRITE),
                 new Endpoint(HttpMethod.PUT, "/animals/1/photos/2/main", null, false, PHOTOS_WRITE),
+
+                // Медицина: полная медкарта — ADMIN и VET; сводка здоровья — все сотрудники
+                new Endpoint(HttpMethod.GET, "/animals/1/medical-card", null, false, MEDICAL),
+                new Endpoint(HttpMethod.PUT, "/animals/1/medical-card",
+                        "{\"sterilized\":true,\"vaccinated\":true,\"parasiteTreated\":false}", false, MEDICAL),
+                new Endpoint(HttpMethod.GET, "/animals/1/health-summary", null, false, STAFF),
+                new Endpoint(HttpMethod.GET, "/animals/1/medical-records", null, false, MEDICAL),
+                new Endpoint(HttpMethod.POST, "/animals/1/medical-records", "{\"weightKg\":3.4}", false, MEDICAL),
+                new Endpoint(HttpMethod.GET, "/medical-records/5", null, false, MEDICAL),
+                new Endpoint(HttpMethod.DELETE, "/medical-records/5", null, false, MEDICAL),
+                new Endpoint(HttpMethod.GET, "/animals/1/procedures", null, false, MEDICAL),
+                new Endpoint(HttpMethod.POST, "/animals/1/procedures", "{\"procedureTypeId\":2}", false, MEDICAL),
+                new Endpoint(HttpMethod.GET, "/procedures/5", null, false, MEDICAL),
+                new Endpoint(HttpMethod.DELETE, "/procedures/5", null, false, MEDICAL),
+
+                // Виды процедур и нормы расхода: читают ADMIN, VET, CURATOR; изменяют ADMIN и VET
+                new Endpoint(HttpMethod.GET, "/procedure-types", null, false, PROCEDURE_TYPES_READ),
+                new Endpoint(HttpMethod.GET, "/procedure-types/2", null, false, PROCEDURE_TYPES_READ),
+                new Endpoint(HttpMethod.GET, "/procedure-types/2/materials", null, false, PROCEDURE_TYPES_READ),
+                new Endpoint(HttpMethod.POST, "/procedure-types", "{\"name\":\"Ревакцинация\"}", false, MEDICAL),
+                new Endpoint(HttpMethod.PUT, "/procedure-types/2", "{\"name\":\"Вакцинация\"}", false, MEDICAL),
+                new Endpoint(HttpMethod.PUT, "/procedure-types/2/rates",
+                        "{\"rates\":[{\"productId\":9,\"quantity\":1}]}", false, MEDICAL),
+                new Endpoint(HttpMethod.DELETE, "/procedure-types/2", null, false, MEDICAL),
+
 
                 new Endpoint(HttpMethod.GET, "/admin/employees", null, false, Set.of("ADMIN"))
         );
@@ -129,6 +160,14 @@ class AccessMatrixWebMvcTest {
     private PublicCatalogService catalogService;
     @MockitoBean
     private EmployeeService employeeService;
+    @MockitoBean
+    private MedicalCardService medicalCardService;
+    @MockitoBean
+    private MedicalRecordService medicalRecordService;
+    @MockitoBean
+    private ProcedureService procedureService;
+    @MockitoBean
+    private ProcedureTypeService procedureTypeService;
 
     @BeforeEach
     void stubFiles() {
@@ -194,6 +233,32 @@ class AccessMatrixWebMvcTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"arrivalSourceCode\":\"STREET\",\"cageId\":1}"), "VET,CURATOR"))
                 .andExpect(status().isCreated());
+    }
+
+    @ParameterizedTest(name = "{0} {1}")
+    @MethodSource("invalidMedicalBodies")
+    void invalidMedicalDataIsBadRequest(String path, String body) throws Exception {
+        mvc.perform(signed(MockMvcRequestBuilders.request(path.endsWith("rates") ? HttpMethod.PUT : HttpMethod.POST, path)
+                        .contentType(MediaType.APPLICATION_JSON).content(body), "VET"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    static Stream<Arguments> invalidMedicalBodies() {
+        return Stream.of(
+                Arguments.of("/animals/1/medical-records", "{\"weightKg\":0}"),
+                Arguments.of("/animals/1/medical-records", "{\"weightKg\":-1.5}"),
+                Arguments.of("/animals/1/medical-records", "{\"weightKg\":1000}"),
+                Arguments.of("/animals/1/procedures", "{}"),
+                Arguments.of("/animals/1/procedures",
+                        "{\"procedureTypeId\":2,\"materials\":[{\"productId\":9,\"batchId\":1,\"warehouseId\":2,\"quantity\":0}]}"),
+                Arguments.of("/animals/1/procedures",
+                        "{\"procedureTypeId\":2,\"materials\":[{\"productId\":9,\"warehouseId\":2}]}"),
+                Arguments.of("/procedure-types", "{\"name\":\" \"}"),
+                Arguments.of("/procedure-types", "{\"name\":\"Тест\",\"cardFlag\":\"NO_SUCH_FLAG\"}"),
+                Arguments.of("/procedure-types/2/rates", "{\"rates\":[{\"productId\":9,\"quantity\":0}]}"),
+                Arguments.of("/procedure-types/2/rates", "{}")
+        );
     }
 
     @Test

@@ -60,6 +60,20 @@ public class ProcedureTypeRecord extends UpdatableRecordImpl<ProcedureTypeRecord
         return (String) get(2);
     }
 
+    /**
+     * Setter for <code>shelter_schema.procedure_type.card_flag</code>.
+     */
+    public void setCardFlag(String value) {
+        set(3, value);
+    }
+
+    /**
+     * Getter for <code>shelter_schema.procedure_type.card_flag</code>.
+     */
+    public String getCardFlag() {
+        return (String) get(3);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -83,12 +97,13 @@ public class ProcedureTypeRecord extends UpdatableRecordImpl<ProcedureTypeRecord
     /**
      * Create a detached, initialised ProcedureTypeRecord
      */
-    public ProcedureTypeRecord(Long id, String name, String description) {
+    public ProcedureTypeRecord(Long id, String name, String description, String cardFlag) {
         super(ProcedureType.PROCEDURE_TYPE);
 
         setId(id);
         setName(name);
         setDescription(description);
+        setCardFlag(cardFlag);
         resetTouchedOnNotNull();
     }
 }

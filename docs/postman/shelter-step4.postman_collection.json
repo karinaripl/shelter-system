@@ -1,0 +1,927 @@
+{
+  "info": {
+    "name": "Shelter — шаг 4: медицина, процедуры, списание со склада",
+    "description": "Сквозной сценарий шага 4 с автотестами на демо-данных (docker compose up загружает их по умолчанию): вход ветеринара → осмотр с весом → вакцинация без выбора партий (списание по FEFO: партия с ближайшим сроком, просроченные не используются) → остаток уменьшился → флаг «привит» в медкарте и в сводке → ручной выбор не-FEFO партии → просроченную партию выбрать нельзя → нехватка материалов (409, остатки не изменились) → удаление ошибочной кастрации снимает флаг, а у животного, поступившего стерилизованным, флаг остаётся → состояние здоровья «лечение» и обратно → правила и матрица доступа.\nНужны демо-учётки (пароль demo12345): ветеринар lebedev, куратор fedorov, координатор belova — у них есть карточки сотрудников, без которых процедуры не вносятся (409).\nПовторный запуск возможен: животные и клетка создаются заново, ожидаемые партии берутся из подсказки /procedure-types/{id}/materials.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8766" },
+    { "key": "vetEmail", "value": "lebedev@demo.shelter.local" },
+    { "key": "curatorEmail", "value": "fedorov@demo.shelter.local" },
+    { "key": "coordinatorEmail", "value": "belova@demo.shelter.local" },
+    { "key": "demoPassword", "value": "demo12345" }
+  ],
+  "item": [
+    {
+      "name": "Подготовка",
+      "item": [
+        {
+          "name": "Вход ветеринара",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "// Новый суффикс на каждый прогон и даты относительно сегодняшнего дня (UTC, как на сервере)",
+              "const run = Date.now().toString(36);",
+              "pm.collectionVariables.set('run', run);",
+              "pm.collectionVariables.set('cageNumber', ('M' + run).slice(-10).toUpperCase());",
+              "const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);",
+              "pm.collectionVariables.set('today', day(0));",
+              "pm.collectionVariables.set('tomorrow', day(1));",
+              "pm.collectionVariables.set('arrivalDate', day(-5));",
+              "pm.collectionVariables.set('beforeArrival', day(-10));"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('200, есть токен', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().token).to.be.a('string'); });",
+              "pm.collectionVariables.set('vetToken', pm.response.json().token);"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{vetEmail}}\",\"password\":\"{{demoPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Вход куратора",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('curatorToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{curatorEmail}}\",\"password\":\"{{demoPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Вход координатора",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('coordinatorToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{coordinatorEmail}}\",\"password\":\"{{demoPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Куратор создаёт клетку",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('cageId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"number\":\"{{cageNumber}}\",\"capacity\":3,\"cageType\":\"Медицинский бокс\"}" },
+            "url": "{{baseUrl}}/cages"
+          }
+        },
+        {
+          "name": "Куратор регистрирует поступление животного (без флагов)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201, в приюте', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().status.code).to.eql('IN_SHELTER'); });",
+            "pm.collectionVariables.set('animalId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Мед-{{run}}\",\"gender\":\"M\",\"arrivalSourceCode\":\"STREET\",\"cageId\":{{cageId}},\"arrivalDate\":\"{{arrivalDate}}\"}" },
+            "url": "{{baseUrl}}/animals"
+          }
+        },
+        {
+          "name": "Куратор регистрирует второе животное (поступило стерилизованным)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('sterilizedAnimalId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Стер-{{run}}\",\"gender\":\"M\",\"arrivalSourceCode\":\"FROM_OWNER\",\"cageId\":{{cageId}},\"arrivalDate\":\"{{arrivalDate}}\"}" },
+            "url": "{{baseUrl}}/animals"
+          }
+        },
+        {
+          "name": "Ветеринар: виды процедур с нормами и флагами",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const types = pm.response.json();",
+            "const byName = (name) => types.find(t => t.name === name);",
+            "pm.test('Вакцинация ставит флаг «привит» и имеет нормы', () => {",
+            "  pm.expect(byName('Вакцинация').cardFlag).to.eql('VACCINATED');",
+            "  pm.expect(byName('Вакцинация').rates.length).to.be.above(0);",
+            "});",
+            "pm.test('Кастрация и стерилизация ставят флаг «стерилизован»', () => {",
+            "  pm.expect(byName('Кастрация').cardFlag).to.eql('STERILIZED');",
+            "  pm.expect(byName('Стерилизация').cardFlag).to.eql('STERILIZED');",
+            "});",
+            "pm.test('Осмотр флаг не ставит', () => pm.expect(byName('Осмотр').cardFlag).to.eql(null));",
+            "pm.collectionVariables.set('vaccinationId', byName('Вакцинация').id);",
+            "pm.collectionVariables.set('castrationId', byName('Кастрация').id);",
+            "const vaccine = byName('Вакцинация').rates.find(r => r.productName === 'Вакцина комплексная');",
+            "pm.collectionVariables.set('vaccineProductId', vaccine.productId);"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedure-types"
+          }
+        },
+        {
+          "name": "Выбывшее животное из демо-данных",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, есть пристроенное животное', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().content.length).to.eql(1); });",
+            "pm.collectionVariables.set('departedAnimalId', pm.response.json().content[0].id);"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/animals?presentOnly=false&status=ADOPTED&size=1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Сценарий: осмотр, вакцинация по FEFO, флаг «привит»",
+      "item": [
+        {
+          "name": "Медкарта нового животного: флаги сняты, веса нет",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const card = pm.response.json();",
+            "pm.test('Медкарта открыта при поступлении', () => pm.expect(card.openedOn).to.eql(pm.collectionVariables.get('arrivalDate')));",
+            "pm.test('Флаги сняты, веса и записей нет', () => {",
+            "  pm.expect(card.sterilized).to.eql(false); pm.expect(card.vaccinated).to.eql(false); pm.expect(card.parasiteTreated).to.eql(false);",
+            "  pm.expect(card.currentWeightKg).to.eql(null); pm.expect(card.recentRecords).to.eql([]); pm.expect(card.recentProcedures).to.eql([]);",
+            "});"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/medical-card"
+          }
+        },
+        {
+          "name": "Ветеринар вносит осмотр с весом",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const record = pm.response.json();",
+            "pm.test('Вес, диагноз, дата сегодня', () => {",
+            "  pm.expect(record.weightKg).to.eql(3.45); pm.expect(record.diagnosis).to.eql('Здоров');",
+            "  pm.expect(record.recordDate).to.eql(pm.collectionVariables.get('today'));",
+            "});",
+            "pm.test('Врач — текущий пользователь (ФИО и должность)', () => {",
+            "  pm.expect(record.employee.fullName).to.eql('Лебедев Андрей Викторович'); pm.expect(record.employee.positionName).to.eql('Ветеринар');",
+            "});",
+            "pm.collectionVariables.set('recordId', record.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"weightKg\":3.45,\"diagnosis\":\"Здоров\",\"prescriptions\":\"Плановая вакцинация\",\"notes\":\"Первичный осмотр\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/medical-records"
+          }
+        },
+        {
+          "name": "Список осмотров с пагинацией",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, один осмотр', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().totalElements).to.eql(1); });",
+            "pm.test('Страница с нуля, размер 5', () => { pm.expect(pm.response.json().page).to.eql(0); pm.expect(pm.response.json().size).to.eql(5); });",
+            "pm.test('Это наш осмотр', () => pm.expect(pm.response.json().content[0].id).to.eql(pm.collectionVariables.get('recordId')));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/medical-records?page=0&size=5"
+          }
+        },
+        {
+          "name": "Просмотр осмотра",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, вес 3.45', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().weightKg).to.eql(3.45); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/medical-records/{{recordId}}"
+          }
+        },
+        {
+          "name": "Подсказка партий для вакцинации (FEFO)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, материалов хватает', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().enough).to.eql(true); });",
+            "const materials = pm.response.json().materials;",
+            "const vaccine = materials.find(m => m.productName === 'Вакцина комплексная');",
+            "const today = pm.collectionVariables.get('today');",
+            "pm.test('Партии в порядке FEFO, рекомендуемая — первая', () => {",
+            "  const dates = vaccine.batches.map(b => b.expirationDate);",
+            "  pm.expect(dates).to.eql([...dates].sort());",
+            "  pm.expect(vaccine.batches[0].recommended).to.eql(true);",
+            "  vaccine.batches.slice(1).forEach(b => pm.expect(b.recommended).to.eql(false));",
+            "});",
+            "pm.test('Среди подходящих нет просроченных', () => vaccine.batches.forEach(b => pm.expect(b.expirationDate >= today).to.eql(true)));",
+            "pm.test('Просроченные — отдельным списком с пометкой', () => {",
+            "  pm.expect(vaccine.expiredBatches.length).to.be.above(0);",
+            "  vaccine.expiredBatches.forEach(b => { pm.expect(b.expirationDate < today).to.eql(true); pm.expect(b.note).to.eql('просрочено — подлежит списанию'); });",
+            "});",
+            "pm.test('Есть вторая годная партия для ручного выбора', () => pm.expect(vaccine.batches.length).to.be.at.least(2));",
+            "// Снимок остатков всех партий всех материалов (партия/склад → количество)",
+            "const snapshot = {};",
+            "materials.forEach(m => [...m.batches, ...m.expiredBatches].forEach(b => snapshot[b.batchId + '/' + b.warehouseId] = b.quantity));",
+            "pm.collectionVariables.set('stockBefore', JSON.stringify(snapshot));",
+            "pm.collectionVariables.set('fefoBatchId', vaccine.batches[0].batchId);",
+            "pm.collectionVariables.set('otherBatchId', vaccine.batches[1].batchId);",
+            "pm.collectionVariables.set('expiredBatchId', vaccine.expiredBatches[0].batchId);",
+            "pm.collectionVariables.set('warehouseId', vaccine.batches[0].warehouseId);",
+            "// Выбор для ручного списания: вакцина — вторая партия, остальное — рекомендованные партии",
+            "const choice = (batchFor) => materials.map(m => ({ productId: m.productId, batchId: batchFor(m).batchId, warehouseId: batchFor(m).warehouseId }));",
+            "pm.collectionVariables.set('manualMaterials', JSON.stringify(choice(m => m.productName === 'Вакцина комплексная' ? m.batches[1] : m.batches[0])));",
+            "pm.collectionVariables.set('expiredMaterials', JSON.stringify(choice(m => m.productName === 'Вакцина комплексная' ? m.expiredBatches[0] : m.batches[0])));",
+            "pm.collectionVariables.set('norms', JSON.stringify(materials.map(m => ({ productId: m.productId, quantity: m.normQuantity }))));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedure-types/{{vaccinationId}}/materials"
+          }
+        },
+        {
+          "name": "Вакцинация без выбора партий — списание по FEFO",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const p = pm.response.json();",
+            "pm.test('Партии подобраны по FEFO, это указано в ответе', () => pm.expect(p.materialSelection).to.eql('FEFO'));",
+            "pm.test('Вакцина списана из партии с ближайшим сроком', () => {",
+            "  const v = p.consumedMaterials.find(c => c.productName === 'Вакцина комплексная');",
+            "  pm.expect(v.batchId).to.eql(pm.collectionVariables.get('fefoBatchId'));",
+            "  pm.expect(v.quantity).to.eql(1);",
+            "});",
+            "pm.test('Списаны все материалы нормы', () => pm.expect(p.consumedMaterials.length).to.eql(JSON.parse(pm.collectionVariables.get('norms')).length));",
+            "pm.test('Флаг «привит» поставила эта процедура', () => pm.expect(p.flagSetByThis).to.eql('VACCINATED'));",
+            "pm.collectionVariables.set('vaccinationRecordId', p.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"procedureTypeId\":{{vaccinationId}},\"result\":\"Без осложнений\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/procedures"
+          }
+        },
+        {
+          "name": "Остатки: FEFO-партия уменьшилась на норму, остальные не изменились",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const before = JSON.parse(pm.collectionVariables.get('stockBefore'));",
+            "const materials = pm.response.json().materials;",
+            "const now = {};",
+            "materials.forEach(m => [...m.batches, ...m.expiredBatches].forEach(b => now[b.batchId + '/' + b.warehouseId] = b.quantity));",
+            "const qty = (map, key) => map[key] === undefined ? 0 : map[key];",
+            "const fefoKey = pm.collectionVariables.get('fefoBatchId') + '/' + pm.collectionVariables.get('warehouseId');",
+            "const otherKey = pm.collectionVariables.get('otherBatchId') + '/' + pm.collectionVariables.get('warehouseId');",
+            "const expiredKey = pm.collectionVariables.get('expiredBatchId') + '/' + pm.collectionVariables.get('warehouseId');",
+            "pm.test('Партия с ближайшим сроком: −1 доза', () => pm.expect(qty(now, fefoKey)).to.be.closeTo(qty(before, fefoKey) - 1, 0.0001));",
+            "pm.test('Партия с дальним сроком не тронута', () => pm.expect(qty(now, otherKey)).to.be.closeTo(qty(before, otherKey), 0.0001));",
+            "pm.test('Просроченная партия не тронута', () => pm.expect(qty(now, expiredKey)).to.be.closeTo(qty(before, expiredKey), 0.0001));",
+            "pm.collectionVariables.set('stockAfterFefo', JSON.stringify(now));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedure-types/{{vaccinationId}}/materials"
+          }
+        },
+        {
+          "name": "Медкарта: «привит», процедура со списанными партиями, текущий вес",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const card = pm.response.json();",
+            "pm.test('Флаг «привит» установлен', () => pm.expect(card.vaccinated).to.eql(true));",
+            "pm.test('Текущий вес — из последнего осмотра', () => { pm.expect(card.currentWeightKg).to.eql(3.45); pm.expect(card.weighedOn).to.eql(pm.collectionVariables.get('today')); });",
+            "pm.test('В истории — вакцинация со списанными материалами', () => {",
+            "  const p = card.recentProcedures.find(x => x.id === pm.collectionVariables.get('vaccinationRecordId'));",
+            "  pm.expect(p.procedureType.name).to.eql('Вакцинация');",
+            "  pm.expect(p.consumedMaterials.length).to.be.above(0);",
+            "});"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/medical-card"
+          }
+        },
+        {
+          "name": "Сводка здоровья (куратор): «привит», вес, дата осмотра",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const s = pm.response.json();",
+            "pm.test('Флаги и состояние', () => { pm.expect(s.vaccinated).to.eql(true); pm.expect(s.sterilized).to.eql(false); pm.expect(s.healthState).to.eql('HEALTHY'); });",
+            "pm.test('Последний вес и дата осмотра', () => { pm.expect(s.currentWeightKg).to.eql(3.45); pm.expect(s.lastExamDate).to.eql(pm.collectionVariables.get('today')); });",
+            "pm.test('В сводке нет диагнозов и процедур', () => { pm.expect(s).to.not.have.property('recentRecords'); pm.expect(s).to.not.have.property('recentProcedures'); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/health-summary"
+          }
+        },
+        {
+          "name": "Ветеринар выбирает не-FEFO партию вручную",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const p = pm.response.json();",
+            "pm.test('Партии выбраны вручную', () => pm.expect(p.materialSelection).to.eql('MANUAL'));",
+            "pm.test('Вакцина списана именно из выбранной партии', () => {",
+            "  const v = p.consumedMaterials.find(c => c.productName === 'Вакцина комплексная');",
+            "  pm.expect(v.batchId).to.eql(pm.collectionVariables.get('otherBatchId'));",
+            "});",
+            "pm.test('Флаг уже стоял — эта процедура его не ставила', () => pm.expect(p.flagSetByThis).to.eql(null));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"procedureTypeId\":{{vaccinationId}},\"result\":\"Ревакцинация\",\"materials\":{{manualMaterials}}}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/procedures"
+          }
+        },
+        {
+          "name": "Остатки: уменьшилась выбранная партия, FEFO-партия не тронута",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const before = JSON.parse(pm.collectionVariables.get('stockAfterFefo'));",
+            "const now = {};",
+            "pm.response.json().materials.forEach(m => [...m.batches, ...m.expiredBatches].forEach(b => now[b.batchId + '/' + b.warehouseId] = b.quantity));",
+            "const qty = (map, key) => map[key] === undefined ? 0 : map[key];",
+            "const w = pm.collectionVariables.get('warehouseId');",
+            "const fefoKey = pm.collectionVariables.get('fefoBatchId') + '/' + w;",
+            "const otherKey = pm.collectionVariables.get('otherBatchId') + '/' + w;",
+            "pm.test('Выбранная партия: −1 доза', () => pm.expect(qty(now, otherKey)).to.be.closeTo(qty(before, otherKey) - 1, 0.0001));",
+            "pm.test('FEFO-партия не изменилась', () => pm.expect(qty(now, fefoKey)).to.be.closeTo(qty(before, fefoKey), 0.0001));",
+            "pm.collectionVariables.set('stockAfterManual', JSON.stringify(now));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedure-types/{{vaccinationId}}/materials"
+          }
+        },
+        {
+          "name": "Негатив: просроченную партию выбрать нельзя → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Партия просрочена, её нужно списать', () => {",
+            "  pm.expect(pm.response.json().message).to.include('Партия просрочена, её нужно списать');",
+            "  pm.expect(pm.response.json().message).to.include('партия №' + pm.collectionVariables.get('expiredBatchId'));",
+            "});"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"procedureTypeId\":{{vaccinationId}},\"materials\":{{expiredMaterials}}}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/procedures"
+          }
+        },
+        {
+          "name": "После отказа остатки не изменились",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const before = JSON.parse(pm.collectionVariables.get('stockAfterManual'));",
+            "const now = {};",
+            "pm.response.json().materials.forEach(m => [...m.batches, ...m.expiredBatches].forEach(b => now[b.batchId + '/' + b.warehouseId] = b.quantity));",
+            "pm.test('Все остатки прежние', () => pm.expect(now).to.eql(before));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedure-types/{{vaccinationId}}/materials"
+          }
+        },
+        {
+          "name": "Процедуры животного: две вакцинации",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, две процедуры', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().totalElements).to.eql(2); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/procedures?page=0&size=10"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Нехватка материалов",
+      "item": [
+        {
+          "name": "Ветеринар создаёт вид процедуры с нормой больше остатка",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.test('Норма сохранена', () => pm.expect(pm.response.json().rates[0].quantity).to.eql(100000));",
+            "pm.collectionVariables.set('hugeTypeId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Тест нехватки {{run}}\",\"description\":\"Временный вид для проверки\",\"rates\":[{\"productId\":{{vaccineProductId}},\"quantity\":100000}]}" },
+            "url": "{{baseUrl}}/procedure-types"
+          }
+        },
+        {
+          "name": "Негатив: название вида процедуры уже занято → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Сообщение на русском', () => pm.expect(pm.response.json().message).to.include('уже есть'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"вакцинация\"}" },
+            "url": "{{baseUrl}}/procedure-types"
+          }
+        },
+        {
+          "name": "Негатив: норма с количеством 0 → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('Сообщение про количество', () => pm.expect(pm.response.json().message).to.include('больше 0'));"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"rates\":[{\"productId\":{{vaccineProductId}},\"quantity\":0}]}" },
+            "url": "{{baseUrl}}/procedure-types/{{hugeTypeId}}/rates"
+          }
+        },
+        {
+          "name": "Подсказка: материалов не хватает",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, enough=false', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().enough).to.eql(false); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedure-types/{{hugeTypeId}}/materials"
+          }
+        },
+        {
+          "name": "Негатив: процедура при нехватке → 409, нужно / есть",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "const message = pm.response.json().message;",
+            "pm.test('Понятное сообщение: что, сколько нужно, сколько есть', () => {",
+            "  pm.expect(message).to.include('Недостаточно материалов');",
+            "  pm.expect(message).to.include('«Вакцина комплексная» — нужно 100000 доза, есть');",
+            "  pm.expect(message).to.include('Процедура не сохранена');",
+            "});"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"procedureTypeId\":{{hugeTypeId}}}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/procedures"
+          }
+        },
+        {
+          "name": "Остатки не изменились после отказа",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const before = JSON.parse(pm.collectionVariables.get('stockAfterManual'));",
+            "const now = {};",
+            "pm.response.json().materials.forEach(m => [...m.batches, ...m.expiredBatches].forEach(b => now[b.batchId + '/' + b.warehouseId] = b.quantity));",
+            "pm.test('Все остатки прежние', () => pm.expect(now).to.eql(before));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedure-types/{{vaccinationId}}/materials"
+          }
+        },
+        {
+          "name": "Процедура не сохранилась: по-прежнему две",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, две процедуры', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().totalElements).to.eql(2); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/procedures"
+          }
+        },
+        {
+          "name": "Временный вид без записей удаляется",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('204', () => pm.response.to.have.status(204));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedure-types/{{hugeTypeId}}"
+          }
+        },
+        {
+          "name": "Негатив: удалить «Вакцинацию» с записями → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Сообщение про записи', () => pm.expect(pm.response.json().message).to.include('уже есть записи процедур'));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedure-types/{{vaccinationId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Удаление процедур и флаги",
+      "item": [
+        {
+          "name": "Ошибочная кастрация ставит флаг «стерилизован»",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.test('Флаг поставила эта процедура', () => pm.expect(pm.response.json().flagSetByThis).to.eql('STERILIZED'));",
+            "pm.collectionVariables.set('castrationRecordId', pm.response.json().id);",
+            "pm.collectionVariables.set('castrationMaterials', JSON.stringify(pm.response.json().consumedMaterials));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"procedureTypeId\":{{castrationId}},\"notes\":\"Внесено по ошибке\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/procedures"
+          }
+        },
+        {
+          "name": "Сводка: «стерилизован»",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, стерилизован', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().sterilized).to.eql(true); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/health-summary"
+          }
+        },
+        {
+          "name": "Удаление ошибочной кастрации: материалы вернулись, флаг снят",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const r = pm.response.json();",
+            "pm.test('Флаг «стерилизован» снят', () => pm.expect(r.flagCleared).to.eql('STERILIZED'));",
+            "pm.test('Возвращены те же партии и количества', () => pm.expect(r.returnedMaterials).to.eql(JSON.parse(pm.collectionVariables.get('castrationMaterials'))));",
+            "pm.test('Сообщение на русском', () => pm.expect(r.message).to.include('снят'));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedures/{{castrationRecordId}}"
+          }
+        },
+        {
+          "name": "Сводка: снова не стерилизован",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, не стерилизован', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().sterilized).to.eql(false); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/health-summary"
+          }
+        },
+        {
+          "name": "Удалённая процедура не найдена → 404",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', () => pm.response.to.have.status(404));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedures/{{castrationRecordId}}"
+          }
+        },
+        {
+          "name": "Второе животное: ветеринар отмечает «стерилизован» при поступлении",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, флаги и особые потребности сохранены', () => {",
+            "  pm.response.to.have.status(200);",
+            "  pm.expect(pm.response.json().sterilized).to.eql(true);",
+            "  pm.expect(pm.response.json().chronicConditions).to.eql('Аллергия на курицу');",
+            "});"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"sterilized\":true,\"vaccinated\":false,\"parasiteTreated\":false,\"chronicConditions\":\"Аллергия на курицу\",\"notes\":\"Поступил стерилизованным (со слов хозяина)\"}" },
+            "url": "{{baseUrl}}/animals/{{sterilizedAnimalId}}/medical-card"
+          }
+        },
+        {
+          "name": "Кастрация животному, которое уже стерилизовано",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.test('Флаг стоял до процедуры — она его не ставила', () => pm.expect(pm.response.json().flagSetByThis).to.eql(null));",
+            "pm.collectionVariables.set('secondCastrationId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"procedureTypeId\":{{castrationId}},\"notes\":\"Внесено по ошибке\"}" },
+            "url": "{{baseUrl}}/animals/{{sterilizedAnimalId}}/procedures"
+          }
+        },
+        {
+          "name": "Удаление процедуры: флаг, стоявший до неё, не снимается",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('Флаг не снят', () => pm.expect(pm.response.json().flagCleared).to.eql(null));",
+            "pm.test('Сообщение объясняет почему', () => pm.expect(pm.response.json().message).to.include('до этой процедуры'));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/procedures/{{secondCastrationId}}"
+          }
+        },
+        {
+          "name": "Сводка второго животного: по-прежнему стерилизован",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, стерилизован', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().sterilized).to.eql(true); });",
+            "pm.test('Особые потребности видны в сводке', () => pm.expect(pm.response.json().chronicConditions).to.eql('Аллергия на курицу'));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/animals/{{sterilizedAnimalId}}/health-summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Состояние здоровья",
+      "item": [
+        {
+          "name": "Ветеринар ставит «лечение»",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, TREATMENT', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().healthState).to.eql('TREATMENT'); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"healthState\":\"TREATMENT\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/health-state"
+          }
+        },
+        {
+          "name": "Сводка (координатор): на лечении",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, TREATMENT', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().healthState).to.eql('TREATMENT'); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/health-summary"
+          }
+        },
+        {
+          "name": "Негатив: куратор меняет состояние здоровья → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"healthState\":\"HEALTHY\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/health-state"
+          }
+        },
+        {
+          "name": "Ветеринар возвращает «здоров»",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, HEALTHY', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().healthState).to.eql('HEALTHY'); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"healthState\":\"HEALTHY\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/health-state"
+          }
+        },
+        {
+          "name": "Сводка: здоров",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, HEALTHY', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().healthState).to.eql('HEALTHY'); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/health-summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Правила и матрица доступа",
+      "item": [
+        {
+          "name": "Негатив: осмотр выбывшему животному → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Сообщение про выбытие', () => pm.expect(pm.response.json().message).to.include('выбыло'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"weightKg\":4.2,\"diagnosis\":\"Здоров\"}" },
+            "url": "{{baseUrl}}/animals/{{departedAnimalId}}/medical-records"
+          }
+        },
+        {
+          "name": "Негатив: процедура выбывшему животному → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Сообщение про выбытие', () => pm.expect(pm.response.json().message).to.include('выбыло'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"procedureTypeId\":{{vaccinationId}}}" },
+            "url": "{{baseUrl}}/animals/{{departedAnimalId}}/procedures"
+          }
+        },
+        {
+          "name": "Негатив: осмотр раньше поступления → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('Сообщение про дату поступления', () => pm.expect(pm.response.json().message).to.include('раньше даты поступления'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"recordDate\":\"{{beforeArrival}}\",\"weightKg\":3.2}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/medical-records"
+          }
+        },
+        {
+          "name": "Негатив: процедура в будущем → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('Сообщение про будущее', () => pm.expect(pm.response.json().message).to.include('в будущем'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"procedureTypeId\":{{vaccinationId}},\"procedureDate\":\"{{tomorrow}}\"}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/procedures"
+          }
+        },
+        {
+          "name": "Негатив: вес 0 → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('Сообщение про вес', () => pm.expect(pm.response.json().message).to.include('Вес должен быть больше 0'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"weightKg\":0}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/medical-records"
+          }
+        },
+        {
+          "name": "Куратор вносит процедуру → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));",
+            "pm.test('Общий формат ошибки', () => pm.expect(pm.response.json().message).to.eql('Недостаточно прав для этого действия'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"procedureTypeId\":{{vaccinationId}}}" },
+            "url": "{{baseUrl}}/animals/{{animalId}}/procedures"
+          }
+        },
+        {
+          "name": "Куратор смотрит полную медкарту → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/medical-card"
+          }
+        },
+        {
+          "name": "Куратор читает виды процедур → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/procedure-types/{{vaccinationId}}"
+          }
+        },
+        {
+          "name": "Куратор меняет нормы расхода → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"rates\":[]}" },
+            "url": "{{baseUrl}}/procedure-types/{{vaccinationId}}/rates"
+          }
+        },
+        {
+          "name": "Координатор смотрит полную медкарту → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/medical-card"
+          }
+        },
+        {
+          "name": "Координатор смотрит осмотры → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/medical-records"
+          }
+        },
+        {
+          "name": "Координатор видит сводку здоровья → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('Флаги, вес и состояние есть', () => { const s = pm.response.json(); pm.expect(s.vaccinated).to.eql(true); pm.expect(s.currentWeightKg).to.eql(3.45); pm.expect(s.healthState).to.eql('HEALTHY'); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animalId}}/health-summary"
+          }
+        },
+        {
+          "name": "Координатор читает виды процедур → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/procedure-types"
+          }
+        },
+        {
+          "name": "Без токена → сводка здоровья → 401",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/animals/{{animalId}}/health-summary"
+          }
+        },
+        {
+          "name": "Публичный каталог без токена",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200, есть животные', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().content.length).to.be.above(0); });",
+            "pm.collectionVariables.set('publicAnimalId', pm.response.json().content[0].id);"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/public/animals?size=1"
+          }
+        },
+        {
+          "name": "Публичная карточка: из медицины только «стерилизован» и «привит»",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('Только «стерилизован» и «привит»', () => {",
+            "  const a = pm.response.json();",
+            "  pm.expect(a).to.have.property('sterilized'); pm.expect(a).to.have.property('vaccinated');",
+            "  ['parasiteTreated', 'healthState', 'chronicConditions', 'currentWeightKg', 'recentRecords'].forEach(f => pm.expect(a).to.not.have.property(f));",
+            "});"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/public/animals/{{publicAnimalId}}"
+          }
+        }
+      ]
+    }
+  ]
+}

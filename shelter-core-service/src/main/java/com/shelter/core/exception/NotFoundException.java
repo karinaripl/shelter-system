@@ -15,6 +15,18 @@ public class NotFoundException extends RuntimeException {
         return new NotFoundException("Клетка с id=" + id + " не найдена");
     }
 
+    public static NotFoundException medicalRecord(Long id) {
+        return new NotFoundException("Запись осмотра с id=" + id + " не найдена");
+    }
+
+    public static NotFoundException procedure(Long id) {
+        return new NotFoundException("Процедура с id=" + id + " не найдена");
+    }
+
+    public static NotFoundException procedureType(Long id) {
+        return new NotFoundException("Вид процедуры с id=" + id + " не найден");
+    }
+
     public static NotFoundException photo(Long id) {
         return new NotFoundException("Фото с id=" + id + " не найдено");
     }

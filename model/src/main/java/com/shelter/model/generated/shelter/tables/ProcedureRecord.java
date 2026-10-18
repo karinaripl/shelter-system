@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
+import org.jooq.Check;
 import org.jooq.Condition;
 import org.jooq.Field;
 import org.jooq.ForeignKey;
@@ -105,6 +106,11 @@ public class ProcedureRecord extends TableImpl<ProcedureRecordRecord> {
      * The column <code>shelter_schema.procedure_record.created_at</code>.
      */
     public final TableField<ProcedureRecordRecord, OffsetDateTime> CREATED_AT = createField(DSL.name("created_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false).defaultValue(DSL.field(DSL.raw("now()"), SQLDataType.TIMESTAMPWITHTIMEZONE)), this, "");
+
+    /**
+     * The column <code>shelter_schema.procedure_record.flag_set_by_this</code>.
+     */
+    public final TableField<ProcedureRecordRecord, String> FLAG_SET_BY_THIS = createField(DSL.name("flag_set_by_this"), SQLDataType.VARCHAR(20), this, "");
 
     private ProcedureRecord(Name alias, Table<ProcedureRecordRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
@@ -245,6 +251,13 @@ public class ProcedureRecord extends TableImpl<ProcedureRecordRecord> {
             _productExpense = new ProductExpensePath(this, null, Keys.PRODUCT_EXPENSE__PRODUCT_EXPENSE_PROCEDURE_RECORD_ID_FKEY.getInverseKey());
 
         return _productExpense;
+    }
+
+    @Override
+    public List<Check<ProcedureRecordRecord>> getChecks() {
+        return Arrays.asList(
+            Internal.createCheck(this, DSL.name("chk_procedure_record_flag_set"), "(((flag_set_by_this)::text = ANY ((ARRAY['STERILIZED'::character varying, 'VACCINATED'::character varying, 'PARASITE_TREATED'::character varying])::text[])))", true)
+        );
     }
 
     @Override

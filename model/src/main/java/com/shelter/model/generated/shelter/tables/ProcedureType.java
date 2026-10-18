@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
+import org.jooq.Check;
 import org.jooq.Condition;
 import org.jooq.Field;
 import org.jooq.ForeignKey;
@@ -74,6 +75,11 @@ public class ProcedureType extends TableImpl<ProcedureTypeRecord> {
      * The column <code>shelter_schema.procedure_type.description</code>.
      */
     public final TableField<ProcedureTypeRecord, String> DESCRIPTION = createField(DSL.name("description"), SQLDataType.CLOB, this, "");
+
+    /**
+     * The column <code>shelter_schema.procedure_type.card_flag</code>.
+     */
+    public final TableField<ProcedureTypeRecord, String> CARD_FLAG = createField(DSL.name("card_flag"), SQLDataType.VARCHAR(20), this, "");
 
     private ProcedureType(Name alias, Table<ProcedureTypeRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
@@ -191,6 +197,13 @@ public class ProcedureType extends TableImpl<ProcedureTypeRecord> {
      */
     public ProductPath product() {
         return procedureConsumptionRate().product();
+    }
+
+    @Override
+    public List<Check<ProcedureTypeRecord>> getChecks() {
+        return Arrays.asList(
+            Internal.createCheck(this, DSL.name("chk_procedure_type_card_flag"), "(((card_flag)::text = ANY ((ARRAY['STERILIZED'::character varying, 'VACCINATED'::character varying, 'PARASITE_TREATED'::character varying])::text[])))", true)
+        );
     }
 
     @Override

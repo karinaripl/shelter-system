@@ -135,6 +135,20 @@ public class ProcedureRecordRecord extends UpdatableRecordImpl<ProcedureRecordRe
         return (OffsetDateTime) get(7);
     }
 
+    /**
+     * Setter for <code>shelter_schema.procedure_record.flag_set_by_this</code>.
+     */
+    public void setFlagSetByThis(String value) {
+        set(8, value);
+    }
+
+    /**
+     * Getter for <code>shelter_schema.procedure_record.flag_set_by_this</code>.
+     */
+    public String getFlagSetByThis() {
+        return (String) get(8);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -158,7 +172,7 @@ public class ProcedureRecordRecord extends UpdatableRecordImpl<ProcedureRecordRe
     /**
      * Create a detached, initialised ProcedureRecordRecord
      */
-    public ProcedureRecordRecord(Long id, Long medicalCardId, Long procedureTypeId, Long employeeId, LocalDate procedureDate, String result, String notes, OffsetDateTime createdAt) {
+    public ProcedureRecordRecord(Long id, Long medicalCardId, Long procedureTypeId, Long employeeId, LocalDate procedureDate, String result, String notes, OffsetDateTime createdAt, String flagSetByThis) {
         super(ProcedureRecord.PROCEDURE_RECORD);
 
         setId(id);
@@ -169,6 +183,7 @@ public class ProcedureRecordRecord extends UpdatableRecordImpl<ProcedureRecordRe
         setResult(result);
         setNotes(notes);
         setCreatedAt(createdAt);
+        setFlagSetByThis(flagSetByThis);
         resetTouchedOnNotNull();
     }
 }

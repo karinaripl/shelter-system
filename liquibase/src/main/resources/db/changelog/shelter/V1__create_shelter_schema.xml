@@ -104,4 +104,20 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="shelter-V13" author="olga">
+        <comment>Медицина: флаг медкарты у вида процедуры, флаг, поставленный процедурой; недостающие медкарты</comment>
+        <sqlFile path="db/changelog/shelter/V13__medical_flags.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V13__medical_flags_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="shelter-V14-demo" author="olga" context="demo">
+        <comment>Демо-данные шага 4: просроченная партия вакцины и партия с дальним сроком</comment>
+        <sqlFile path="db/changelog/shelter/V14__demo_medical.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V14__demo_medical_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>
