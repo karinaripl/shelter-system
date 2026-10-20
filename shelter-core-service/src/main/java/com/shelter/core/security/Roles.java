@@ -42,6 +42,18 @@ public final class Roles {
     /** Приход: поставки (без оплаты), натуральные пожертвования, список благотворителей (только имена). */
     public static final String RECEIPTS = "hasAnyRole('ADMIN', 'CURATOR')";
 
+    /** Волонтёры: полная анкета с паспортом (чтение и изменение), закрепления — изменение. */
+    public static final String VOLUNTEERS_WRITE = "hasAnyRole('ADMIN', 'COORDINATOR')";
+
+    /** Волонтёры и закрепления: чтение (куратор видит только имя и контакты волонтёра). */
+    public static final String VOLUNTEERS_READ = "hasAnyRole('ADMIN', 'COORDINATOR', 'CURATOR')";
+
+    /** Мероприятия и участие животных: изменение. */
+    public static final String EVENTS_WRITE = "hasAnyRole('ADMIN', 'ADOPTION_MANAGER', 'COORDINATOR')";
+
+    /** Отчёт об эффективности мероприятий. */
+    public static final String EVENT_REPORT = "hasAnyRole('ADMIN', 'ADOPTION_MANAGER', 'COORDINATOR')";
+
     /** Фото животных: изменение. */
     public static final String PHOTOS_WRITE = "hasAnyRole('ADMIN', 'CURATOR', 'ADOPTION_MANAGER')";
 

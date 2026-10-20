@@ -1,0 +1,856 @@
+{
+  "info": {
+    "name": "Shelter — шаг 6.1: волонтёры и мероприятия",
+    "description": "Сквозной сценарий шага 6.1 с автотестами на демо-учётках (пароль demo12345; администратор — admin@shelter.local / admin12345): координатор создаёт волонтёра → закрепляет за животным → повторное закрепление (409) → деактивация с действующим закреплением (409) → закрывает закрепление → куратор видит волонтёра без паспорта → волонтёр неактивен, закрепить его нельзя (409) → менеджер по пристройству создаёт мероприятие на сегодня → добавляет животное → повторно (409) → состояние после → мероприятие на завтра: животное добавляется заранее (201) → вчерашнее мероприятие: менеджер — 409, администратор — 201 → перенос мероприятия убирает выбывшее животное → животное из вчерашнего мероприятия пристраивается → отчёт эффективности → /public/events без токена. Плюс негативные проверки правил и матрицы доступа.\nПовторный запуск возможен: клетка, животные, волонтёр и мероприятия создаются заново на каждый прогон.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8766" },
+    { "key": "coordinatorEmail", "value": "belova@demo.shelter.local" },
+    { "key": "curatorEmail", "value": "fedorov@demo.shelter.local" },
+    { "key": "managerEmail", "value": "orlova@demo.shelter.local" },
+    { "key": "vetEmail", "value": "lebedev@demo.shelter.local" },
+    { "key": "demoPassword", "value": "demo12345" },
+    { "key": "adminEmail", "value": "admin@shelter.local" },
+    { "key": "adminPassword", "value": "admin12345" }
+  ],
+  "item": [
+    {
+      "name": "Подготовка",
+      "item": [
+        {
+          "name": "Вход координатора",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "// Новый суффикс и паспорт на каждый прогон, даты относительно сегодняшнего дня (UTC, как на сервере)",
+              "pm.collectionVariables.set('run', Date.now().toString(36));",
+              "pm.collectionVariables.set('cageNumber', ('V' + pm.collectionVariables.get('run')).slice(-10).toUpperCase());",
+              "const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);",
+              "pm.collectionVariables.set('today', day(0));",
+              "pm.collectionVariables.set('tomorrow', day(1));",
+              "pm.collectionVariables.set('yesterday', day(-1));",
+              "pm.collectionVariables.set('monthAgo', day(-30));",
+              "pm.collectionVariables.set('passportSeries', String(1000 + Math.floor(Math.random() * 9000)));",
+              "pm.collectionVariables.set('passportNumber', String(100000 + Math.floor(Math.random() * 900000)));"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('coordinatorToken', pm.response.json().token);"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{coordinatorEmail}}\",\"password\":\"{{demoPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Вход куратора",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('curatorToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{curatorEmail}}\",\"password\":\"{{demoPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Вход менеджера по пристройству",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('managerToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{managerEmail}}\",\"password\":\"{{demoPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Вход ветеринара",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('vetToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{vetEmail}}\",\"password\":\"{{demoPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Вход администратора",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.collectionVariables.set('adminToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{adminEmail}}\",\"password\":\"{{adminPassword}}\"}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Регистрация посетителя",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('visitorToken', pm.response.json().token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"username\":\"visitor6-{{run}}\",\"email\":\"visitor6-{{run}}@test.local\",\"password\":\"password1\"}" },
+            "url": "{{baseUrl}}/auth/register"
+          }
+        },
+        {
+          "name": "Куратор создаёт клетку",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('cageId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"number\":\"{{cageNumber}}\",\"capacity\":5}" },
+            "url": "{{baseUrl}}/cages"
+          }
+        },
+        {
+          "name": "Куратор: животное 1 (участник и подопечный волонтёра)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('animal1Id', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Участник-{{run}}\",\"gender\":\"M\",\"arrivalDate\":\"{{monthAgo}}\",\"arrivalSourceCode\":\"STREET\",\"cageId\":{{cageId}}}" },
+            "url": "{{baseUrl}}/animals"
+          }
+        },
+        {
+          "name": "Куратор: животное 2 (выбудет до переноса мероприятия)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('animal2Id', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Выбывший-{{run}}\",\"gender\":\"F\",\"arrivalDate\":\"{{monthAgo}}\",\"arrivalSourceCode\":\"STREET\",\"cageId\":{{cageId}}}" },
+            "url": "{{baseUrl}}/animals"
+          }
+        },
+        {
+          "name": "Куратор: животное 3 (пристроят после мероприятия)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('animal3Id', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Пристроенный-{{run}}\",\"gender\":\"F\",\"arrivalDate\":\"{{monthAgo}}\",\"arrivalSourceCode\":\"STREET\",\"cageId\":{{cageId}}}" },
+            "url": "{{baseUrl}}/animals"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Волонтёры и закрепления",
+      "item": [
+        {
+          "name": "Координатор создаёт волонтёра с паспортом",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const v = pm.response.json();",
+            "pm.test('полная анкета: паспорт, навыки, регистрация сегодня, активен', () => {",
+            "  pm.expect(v.passportSeries).to.eql(pm.collectionVariables.get('passportSeries'));",
+            "  pm.expect(v.passportNumber).to.eql(pm.collectionVariables.get('passportNumber'));",
+            "  pm.expect(v.skills).to.include('Фото');",
+            "  pm.expect(v.registrationDate).to.eql(pm.collectionVariables.get('today'));",
+            "  pm.expect(v.active).to.eql(true);",
+            "});",
+            "pm.collectionVariables.set('volunteerId', v.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"fullName\":\"Волонтёр {{run}}\",\"phone\":\"+79990001122\",\"email\":\"volunteer-{{run}}@test.local\",\"skills\":\"Фотосъёмка, социализация\",\"passportSeries\":\"{{passportSeries}}\",\"passportNumber\":\"{{passportNumber}}\"}" },
+            "url": "{{baseUrl}}/volunteers"
+          }
+        },
+        {
+          "name": "Негатив: тот же паспорт у второго волонтёра → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('уже указан'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"fullName\":\"Двойник {{run}}\",\"passportSeries\":\"{{passportSeries}}\",\"passportNumber\":\"{{passportNumber}}\"}" },
+            "url": "{{baseUrl}}/volunteers"
+          }
+        },
+        {
+          "name": "Негатив: паспорт без номера → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('серию'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"fullName\":\"Без номера {{run}}\",\"passportSeries\":\"1234\"}" },
+            "url": "{{baseUrl}}/volunteers"
+          }
+        },
+        {
+          "name": "Координатор закрепляет волонтёра за животным",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const a = pm.response.json();",
+            "pm.test('действует с сегодняшнего дня', () => { pm.expect(a.active).to.eql(true); pm.expect(a.startDate).to.eql(pm.collectionVariables.get('today')); pm.expect(a.endDate).to.eql(null); });",
+            "pm.collectionVariables.set('assignmentId', a.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"volunteerId\":{{volunteerId}},\"animalId\":{{animal1Id}},\"notes\":\"Приучение к рукам\"}" },
+            "url": "{{baseUrl}}/volunteer-assignments"
+          }
+        },
+        {
+          "name": "Негатив: повторное закрепление той же пары → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('уже закреплён'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"volunteerId\":{{volunteerId}},\"animalId\":{{animal1Id}}}" },
+            "url": "{{baseUrl}}/volunteer-assignments"
+          }
+        },
+        {
+          "name": "Негатив: деактивация волонтёра с действующим закреплением → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('Сначала закройте'));"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"active\":false}" },
+            "url": "{{baseUrl}}/volunteers/{{volunteerId}}/active"
+          }
+        },
+        {
+          "name": "Координатор закрывает закрепление",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const a = pm.response.json();",
+            "pm.test('закрыто сегодняшним днём', () => { pm.expect(a.active).to.eql(false); pm.expect(a.endDate).to.eql(pm.collectionVariables.get('today')); });"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"endDate\":\"{{today}}\"}" },
+            "url": "{{baseUrl}}/volunteer-assignments/{{assignmentId}}/close"
+          }
+        },
+        {
+          "name": "Негатив: закрыть закрепление повторно → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/volunteer-assignments/{{assignmentId}}/close"
+          }
+        },
+        {
+          "name": "Куратор видит волонтёра без паспорта",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const v = pm.response.json();",
+            "pm.test('имя и контакты есть', () => { pm.expect(v.fullName).to.include(pm.collectionVariables.get('run')); pm.expect(v.phone).to.eql('+79990001122'); pm.expect(v.email).to.include('volunteer-'); });",
+            "pm.test('паспорта и прочих полей анкеты нет', () => pm.expect(v).to.not.have.any.keys('passportSeries', 'passportNumber', 'skills', 'address', 'birthDate', 'registrationDate', 'active'));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/volunteers/{{volunteerId}}"
+          }
+        },
+        {
+          "name": "Куратор: волонтёры животного (история)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const list = pm.response.json();",
+            "pm.test('закрытое закрепление в истории', () => { const a = list.find(x => x.id === pm.collectionVariables.get('assignmentId')); pm.expect(a).to.be.an('object'); pm.expect(a.active).to.eql(false); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/animals/{{animal1Id}}/volunteers"
+          }
+        },
+        {
+          "name": "Координатор делает волонтёра неактивным",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('неактивен', () => pm.expect(pm.response.json().active).to.eql(false));"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"active\":false}" },
+            "url": "{{baseUrl}}/volunteers/{{volunteerId}}/active"
+          }
+        },
+        {
+          "name": "Негатив: закрепление за неактивным волонтёром → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('неактивен'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"volunteerId\":{{volunteerId}},\"animalId\":{{animal1Id}}}" },
+            "url": "{{baseUrl}}/volunteer-assignments"
+          }
+        },
+        {
+          "name": "Неактивный волонтёр скрыт из списка по умолчанию",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('не найден среди активных', () => pm.expect(pm.response.json().totalElements).to.eql(0));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/volunteers?name={{run}}"
+          }
+        },
+        {
+          "name": "Неактивный волонтёр виден с includeInactive=true",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const page = pm.response.json();",
+            "pm.test('найден, неактивен', () => { pm.expect(page.totalElements).to.eql(1); pm.expect(page.content[0].active).to.eql(false); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/volunteers?name={{run}}&includeInactive=true"
+          }
+        },
+        {
+          "name": "Негатив: удалить волонтёра с закреплениями → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('есть закрепления'));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/volunteers/{{volunteerId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Мероприятия",
+      "item": [
+        {
+          "name": "Менеджер создаёт мероприятие на сегодня",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "const e = pm.response.json();",
+            "pm.test('организатор — текущий пользователь', () => pm.expect(e.organizer.fullName).to.eql('Орлова Дарья Игоревна'));",
+            "pm.test('участников пока нет', () => pm.expect(e.participants).to.eql([]));",
+            "pm.collectionVariables.set('eventTodayId', e.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Выставка {{run}}\",\"eventDate\":\"{{today}}\",\"location\":\"ТЦ «Радуга»\",\"notes\":\"Внутренняя заметка\"}" },
+            "url": "{{baseUrl}}/events"
+          }
+        },
+        {
+          "name": "Менеджер добавляет животное в мероприятие",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.test('животное среди участников', () => pm.expect(pm.response.json().participants.map(p => p.animalId)).to.include(pm.collectionVariables.get('animal1Id')));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"animalId\":{{animal1Id}}}" },
+            "url": "{{baseUrl}}/events/{{eventTodayId}}/animals"
+          }
+        },
+        {
+          "name": "Негатив: то же животное повторно → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('уже участвует'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"animalId\":{{animal1Id}}}" },
+            "url": "{{baseUrl}}/events/{{eventTodayId}}/animals"
+          }
+        },
+        {
+          "name": "Менеджер указывает состояние после мероприятия",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const p = pm.response.json().participants.find(x => x.animalId === pm.collectionVariables.get('animal1Id'));",
+            "pm.test('состояние сохранено', () => pm.expect(p.conditionAfter).to.eql('Спокоен, хорошо перенёс дорогу'));"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"conditionAfter\":\"Спокоен, хорошо перенёс дорогу\"}" },
+            "url": "{{baseUrl}}/events/{{eventTodayId}}/animals/{{animal1Id}}"
+          }
+        },
+        {
+          "name": "Менеджер создаёт мероприятие на завтра",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('eventTomorrowId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"День открытых дверей {{run}}\",\"eventDate\":\"{{tomorrow}}\",\"location\":\"Приют\"}" },
+            "url": "{{baseUrl}}/events"
+          }
+        },
+        {
+          "name": "Мероприятие на завтра: менеджер добавляет животное заранее → 201",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.test('список участников составлен заранее', () => pm.expect(pm.response.json().participants.map(p => p.animalId)).to.include(pm.collectionVariables.get('animal1Id')));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"animalId\":{{animal1Id}}}" },
+            "url": "{{baseUrl}}/events/{{eventTomorrowId}}/animals"
+          }
+        },
+        {
+          "name": "Негатив: состояние после ещё не прошедшего мероприятия → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('ещё не прошло'));"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"conditionAfter\":\"Рано\"}" },
+            "url": "{{baseUrl}}/events/{{eventTomorrowId}}/animals/{{animal1Id}}"
+          }
+        },
+        {
+          "name": "Менеджер вносит вчерашнее мероприятие",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('eventYesterdayId', pm.response.json().id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Фотосессия {{run}}\",\"eventDate\":\"{{yesterday}}\",\"location\":\"Студия\"}" },
+            "url": "{{baseUrl}}/events"
+          }
+        },
+        {
+          "name": "Негатив: вчерашнее мероприятие — менеджер добавляет животное → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));",
+            "pm.test('понятное сообщение', () => pm.expect(pm.response.json().message).to.include('только администратор'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"animalId\":{{animal1Id}}}" },
+            "url": "{{baseUrl}}/events/{{eventYesterdayId}}/animals"
+          }
+        },
+        {
+          "name": "Вчерашнее мероприятие: администратор добавляет животное → 201",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"animalId\":{{animal1Id}}}" },
+            "url": "{{baseUrl}}/events/{{eventYesterdayId}}/animals"
+          }
+        },
+        {
+          "name": "Вчерашнее мероприятие: администратор добавляет животное 3 → 201",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));",
+            "pm.test('два участника', () => pm.expect(pm.response.json().participants.length).to.eql(2));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"animalId\":{{animal3Id}}}" },
+            "url": "{{baseUrl}}/events/{{eventYesterdayId}}/animals"
+          }
+        },
+        {
+          "name": "Менеджер добавляет животное 2 в сегодняшнее мероприятие",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201', () => pm.response.to.have.status(201));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"animalId\":{{animal2Id}}}" },
+            "url": "{{baseUrl}}/events/{{eventTodayId}}/animals"
+          }
+        },
+        {
+          "name": "Куратор оформляет выбытие животного 2 («передан») сегодня",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('выбыло сегодня', () => pm.expect(pm.response.json().departureDate).to.eql(pm.collectionVariables.get('today')));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"departureDate\":\"{{today}}\",\"status\":\"TRANSFERRED\",\"note\":\"Передан в другой приют\"}" },
+            "url": "{{baseUrl}}/animals/{{animal2Id}}/departure"
+          }
+        },
+        {
+          "name": "Выбывшее сегодня животное осталось в сегодняшнем мероприятии",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('оба участника на месте', () => pm.expect(pm.response.json().participants.map(p => p.animalId)).to.include.members([pm.collectionVariables.get('animal1Id'), pm.collectionVariables.get('animal2Id')]));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "url": "{{baseUrl}}/events/{{eventTodayId}}"
+          }
+        },
+        {
+          "name": "Перенос мероприятия на завтра убирает выбывшее животное",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const r = pm.response.json();",
+            "pm.test('в ответе — кого убрали', () => pm.expect(r.removedAnimals.map(a => a.animalId)).to.eql([pm.collectionVariables.get('animal2Id')]));",
+            "pm.test('дата новая, животное 1 осталось, животного 2 нет', () => {",
+            "  pm.expect(r.event.eventDate).to.eql(pm.collectionVariables.get('tomorrow'));",
+            "  const ids = r.event.participants.map(p => p.animalId);",
+            "  pm.expect(ids).to.include(pm.collectionVariables.get('animal1Id'));",
+            "  pm.expect(ids).to.not.include(pm.collectionVariables.get('animal2Id'));",
+            "});"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Выставка {{run}}\",\"eventDate\":\"{{tomorrow}}\",\"location\":\"ТЦ «Радуга»\"}" },
+            "url": "{{baseUrl}}/events/{{eventTodayId}}"
+          }
+        },
+        {
+          "name": "Куратор переводит животное 3 в «готов к пристройству»",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('AVAILABLE', () => pm.expect(pm.response.json().status.code).to.eql('AVAILABLE'));"
+          ] } }],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"status\":\"AVAILABLE\"}" },
+            "url": "{{baseUrl}}/animals/{{animal3Id}}/status"
+          }
+        },
+        {
+          "name": "Куратор: животное 3 пристроено сегодня (после вчерашнего мероприятия)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('ADOPTED', () => pm.expect(pm.response.json().status.code).to.eql('ADOPTED'));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"departureDate\":\"{{today}}\",\"status\":\"ADOPTED\",\"note\":\"Познакомились на фотосессии\"}" },
+            "url": "{{baseUrl}}/animals/{{animal3Id}}/departure"
+          }
+        },
+        {
+          "name": "Менеджер: отчёт об эффективности (конец периода в будущем)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const r = pm.response.json();",
+            "pm.test('конец периода — сегодня', () => pm.expect(r.to).to.eql(pm.collectionVariables.get('today')));",
+            "const e = r.events.find(x => x.eventId === pm.collectionVariables.get('eventYesterdayId'));",
+            "pm.test('вчерашнее мероприятие: 2 участника, 1 пристроен, 50%', () => { pm.expect(e.participants).to.eql(2); pm.expect(e.adopted).to.eql(1); pm.expect(e.adoptionRatePercent).to.eql(50.0); });",
+            "pm.test('будущие мероприятия не учитываются', () => { const ids = r.events.map(x => x.eventId); pm.expect(ids).to.not.include(pm.collectionVariables.get('eventTomorrowId')); pm.expect(ids).to.not.include(pm.collectionVariables.get('eventTodayId')); r.events.forEach(x => pm.expect(x.eventDate <= r.to).to.eql(true)); });",
+            "pm.test('итог сходится с мероприятиями', () => { pm.expect(r.total.events).to.eql(r.events.length); pm.expect(r.total.participants).to.eql(r.events.reduce((s, x) => s + x.participants, 0)); pm.expect(r.total.adopted).to.eql(r.events.reduce((s, x) => s + x.adopted, 0)); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "url": "{{baseUrl}}/reports/event-effectiveness?from={{yesterday}}&to={{tomorrow}}"
+          }
+        },
+        {
+          "name": "Координатор: отчёт об эффективности → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{coordinatorToken}}" }],
+            "url": "{{baseUrl}}/reports/event-effectiveness"
+          }
+        },
+        {
+          "name": "Анонсы /public/events без токена",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const items = pm.response.json().content;",
+            "const ids = items.map(e => e.id);",
+            "pm.test('будущие мероприятия есть, прошедших нет', () => { pm.expect(ids).to.include(pm.collectionVariables.get('eventTomorrowId')); pm.expect(ids).to.not.include(pm.collectionVariables.get('eventYesterdayId')); });",
+            "pm.test('только название, дата, место', () => items.forEach(e => pm.expect(Object.keys(e).sort()).to.eql(['eventDate', 'id', 'location', 'name'])));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/public/events?size=50"
+          }
+        },
+        {
+          "name": "Негатив: удалить прошедшее мероприятие с участниками → 409",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('409', () => pm.response.to.have.status(409));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "url": "{{baseUrl}}/events/{{eventYesterdayId}}"
+          }
+        },
+        {
+          "name": "Негатив: мероприятие без даты → 400",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Без даты\"}" },
+            "url": "{{baseUrl}}/events"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Матрица доступа",
+      "item": [
+        {
+          "name": "Ветеринар создаёт мероприятие → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Не положено\",\"eventDate\":\"{{tomorrow}}\"}" },
+            "url": "{{baseUrl}}/events"
+          }
+        },
+        {
+          "name": "Ветеринар смотрит мероприятия → 200",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{vetToken}}" }],
+            "url": "{{baseUrl}}/events/{{eventTodayId}}"
+          }
+        },
+        {
+          "name": "Куратор создаёт волонтёра → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "body": { "mode": "raw", "raw": "{\"fullName\":\"Не положено\"}" },
+            "url": "{{baseUrl}}/volunteers"
+          }
+        },
+        {
+          "name": "Куратор ищет волонтёров по навыкам → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/volunteers?skills=photo"
+          }
+        },
+        {
+          "name": "Куратор: отчёт об эффективности → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{curatorToken}}" }],
+            "url": "{{baseUrl}}/reports/event-effectiveness"
+          }
+        },
+        {
+          "name": "Менеджер по пристройству смотрит волонтёров → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "url": "{{baseUrl}}/volunteers"
+          }
+        },
+        {
+          "name": "Посетитель смотрит мероприятия → 403",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{visitorToken}}" }],
+            "url": "{{baseUrl}}/events"
+          }
+        },
+        {
+          "name": "Без токена /events → 401",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/events"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Уборка (будущие мероприятия прогона)",
+      "item": [
+        {
+          "name": "Менеджер убирает животное 1 из перенесённого мероприятия → 204",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('204', () => pm.response.to.have.status(204));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "url": "{{baseUrl}}/events/{{eventTodayId}}/animals/{{animal1Id}}"
+          }
+        },
+        {
+          "name": "Менеджер удаляет перенесённое мероприятие без участников → 204",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('204', () => pm.response.to.have.status(204));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "url": "{{baseUrl}}/events/{{eventTodayId}}"
+          }
+        },
+        {
+          "name": "Менеджер убирает животное 1 из завтрашнего мероприятия → 204",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('204', () => pm.response.to.have.status(204));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "url": "{{baseUrl}}/events/{{eventTomorrowId}}/animals/{{animal1Id}}"
+          }
+        },
+        {
+          "name": "Менеджер удаляет завтрашнее мероприятие без участников → 204",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('204', () => pm.response.to.have.status(204));"
+          ] } }],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "url": "{{baseUrl}}/events/{{eventTomorrowId}}"
+          }
+        },
+        {
+          "name": "Удалённое мероприятие → 404",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', () => pm.response.to.have.status(404));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "url": "{{baseUrl}}/events/{{eventTomorrowId}}"
+          }
+        },
+        {
+          "name": "Прошедшее мероприятие с участниками осталось",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('2 участника', () => pm.expect(pm.response.json().participants.length).to.eql(2));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }],
+            "url": "{{baseUrl}}/events/{{eventYesterdayId}}"
+          }
+        },
+        {
+          "name": "В /public/events мероприятий прогона нет",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const ids = pm.response.json().content.map(e => e.id);",
+            "pm.test('удалённых мероприятий нет', () => { pm.expect(ids).to.not.include(pm.collectionVariables.get('eventTodayId')); pm.expect(ids).to.not.include(pm.collectionVariables.get('eventTomorrowId')); });"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/public/events?size=50"
+          }
+        }
+      ]
+    }
+  ]
+}

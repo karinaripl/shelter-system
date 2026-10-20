@@ -1,6 +1,13 @@
 package com.shelter.core.controller;
 
+import com.shelter.core.dto.PageResponse;
+import com.shelter.core.dto.VolunteerResponse;
+import com.shelter.core.security.CurrentUser;
 import com.shelter.core.service.AnimalPhotoService;
+import com.shelter.core.service.AssignmentService;
+import com.shelter.core.service.EventReportService;
+import com.shelter.core.service.EventService;
+import com.shelter.core.service.VolunteerService;
 import com.shelter.core.service.AnimalService;
 import com.shelter.core.service.CageService;
 import com.shelter.core.service.DictionaryService;
@@ -26,6 +33,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -53,6 +61,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest
 @ImportAutoConfiguration(GatewayAuthAutoConfiguration.class)
+@Import(CurrentUser.class)
 class AccessMatrixWebMvcTest {
 
     private static final List<String> ROLES =
@@ -65,6 +74,11 @@ class AccessMatrixWebMvcTest {
     private static final Set<String> WAREHOUSE_READ = Set.of("ADMIN", "VET", "CURATOR");
     private static final Set<String> WAREHOUSE_WRITE = Set.of("ADMIN", "CURATOR");
     private static final Set<String> RECEIPTS = Set.of("ADMIN", "CURATOR");
+    private static final Set<String> VOLUNTEERS_WRITE = Set.of("ADMIN", "COORDINATOR");
+    private static final Set<String> VOLUNTEERS_READ = Set.of("ADMIN", "COORDINATOR", "CURATOR");
+    private static final Set<String> EVENTS_WRITE = Set.of("ADMIN", "ADOPTION_MANAGER", "COORDINATOR");
+    private static final String VOLUNTEER_BODY = "{\"fullName\":\"Гусева Полина\"}";
+    private static final String EVENT_BODY = "{\"name\":\"Выставка\",\"eventDate\":\"2026-10-19\"}";
     private static final String PRODUCT_BODY = "{\"name\":\"Корм\",\"categoryId\":1,\"unitOfMeasure\":\"кг\"}";
 
     /** Эндпоинт и роли, которым он разрешён. Тела запросов валидны: иначе запрещённая роль получила бы 400. */
@@ -187,7 +201,37 @@ class AccessMatrixWebMvcTest {
                 new Endpoint(HttpMethod.GET, "/reports/below-minimum", null, false, WAREHOUSE_READ),
                 new Endpoint(HttpMethod.GET, "/reports/movements?productId=1", null, false, WAREHOUSE_READ),
 
+                // Волонтёры: анкета — ADMIN, COORDINATOR; имя и контакты — ещё CURATOR
+                new Endpoint(HttpMethod.GET, "/volunteers", null, false, VOLUNTEERS_READ),
+                new Endpoint(HttpMethod.GET, "/volunteers/5", null, false, VOLUNTEERS_READ),
+                new Endpoint(HttpMethod.POST, "/volunteers", VOLUNTEER_BODY, false, VOLUNTEERS_WRITE),
+                new Endpoint(HttpMethod.PUT, "/volunteers/5", VOLUNTEER_BODY, false, VOLUNTEERS_WRITE),
+                new Endpoint(HttpMethod.PUT, "/volunteers/5/active", "{\"active\":false}", false, VOLUNTEERS_WRITE),
+                new Endpoint(HttpMethod.DELETE, "/volunteers/5", null, false, VOLUNTEERS_WRITE),
 
+                // Закрепления: ADMIN, COORDINATOR (RW), CURATOR (R)
+                new Endpoint(HttpMethod.GET, "/volunteers/5/assignments", null, false, VOLUNTEERS_READ),
+                new Endpoint(HttpMethod.GET, "/animals/1/volunteers", null, false, VOLUNTEERS_READ),
+                new Endpoint(HttpMethod.GET, "/volunteer-assignments/50", null, false, VOLUNTEERS_READ),
+                new Endpoint(HttpMethod.POST, "/volunteer-assignments", "{\"volunteerId\":5,\"animalId\":1}", false,
+                        VOLUNTEERS_WRITE),
+                new Endpoint(HttpMethod.PUT, "/volunteer-assignments/50/close", "{}", false, VOLUNTEERS_WRITE),
+                new Endpoint(HttpMethod.DELETE, "/volunteer-assignments/50", null, false, VOLUNTEERS_WRITE),
+
+                // Мероприятия и участие: читают все сотрудники; меняют ADMIN, ADOPTION_MANAGER, COORDINATOR
+                new Endpoint(HttpMethod.GET, "/events", null, false, STAFF),
+                new Endpoint(HttpMethod.GET, "/events/70", null, false, STAFF),
+                new Endpoint(HttpMethod.GET, "/animals/1/events", null, false, STAFF),
+                new Endpoint(HttpMethod.POST, "/events", EVENT_BODY, false, EVENTS_WRITE),
+                new Endpoint(HttpMethod.PUT, "/events/70", EVENT_BODY, false, EVENTS_WRITE),
+                new Endpoint(HttpMethod.DELETE, "/events/70", null, false, EVENTS_WRITE),
+                new Endpoint(HttpMethod.POST, "/events/70/animals", "{\"animalId\":1}", false, EVENTS_WRITE),
+                new Endpoint(HttpMethod.PUT, "/events/70/animals/1", "{\"conditionAfter\":\"Спокоен\"}", false,
+                        EVENTS_WRITE),
+                new Endpoint(HttpMethod.DELETE, "/events/70/animals/1", null, false, EVENTS_WRITE),
+
+                // Отчёт об эффективности мероприятий: ADMIN, ADOPTION_MANAGER, COORDINATOR
+                new Endpoint(HttpMethod.GET, "/reports/event-effectiveness", null, false, EVENTS_WRITE),
 
                 new Endpoint(HttpMethod.GET, "/admin/employees", null, false, Set.of("ADMIN"))
         );
@@ -197,7 +241,8 @@ class AccessMatrixWebMvcTest {
         return List.of(
                 new Endpoint(HttpMethod.GET, "/public/animals", null, false, Set.of()),
                 new Endpoint(HttpMethod.GET, "/public/animals/1", null, false, Set.of()),
-                new Endpoint(HttpMethod.GET, "/public/photos/2", null, false, Set.of())
+                new Endpoint(HttpMethod.GET, "/public/photos/2", null, false, Set.of()),
+                new Endpoint(HttpMethod.GET, "/public/events", null, false, Set.of())
         );
     }
 
@@ -247,12 +292,94 @@ class AccessMatrixWebMvcTest {
     private StockOperationService stockOperationService;
     @MockitoBean
     private StockReportService stockReportService;
+    @MockitoBean
+    private VolunteerService volunteerService;
+    @MockitoBean
+    private AssignmentService assignmentService;
+    @MockitoBean
+    private EventService eventService;
+    @MockitoBean
+    private EventReportService eventReportService;
+
+    /** Полная анкета волонтёра — так её возвращает сервис; что показать роли, решает контроллер. */
+    private static final VolunteerResponse FULL_VOLUNTEER = new VolunteerResponse(5L, "Гусева Полина", "89100000001",
+            "guseva@test.local", "Москва", java.time.LocalDate.of(1990, 1, 1), java.time.LocalDate.of(2025, 1, 1),
+            "Фотосъёмка", "1234", "567890", true);
 
     @BeforeEach
     void stubFiles() {
         var file = new AnimalPhotoService.PhotoFile(new byte[]{1}, MediaType.IMAGE_PNG);
         when(photoService.file(any(), any())).thenReturn(file);
         when(photoService.publicFile(any())).thenReturn(file);
+        when(volunteerService.findById(5L)).thenReturn(FULL_VOLUNTEER);
+        when(volunteerService.findPage(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(),
+                org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenReturn(PageResponse.of(List.of(FULL_VOLUNTEER), 0, 20, 1));
+    }
+
+    // ---------- волонтёры: куратор видит только имя и контакты ----------
+
+    @ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"/volunteers/5", "/volunteers"})
+    void curatorSeesOnlyNameAndContacts(String path) throws Exception {
+        String prefix = path.equals("/volunteers") ? "$.content[0]" : "$";
+        mvc.perform(signed(MockMvcRequestBuilders.get(path), "CURATOR"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(prefix + ".fullName").value("Гусева Полина"))
+                .andExpect(jsonPath(prefix + ".phone").value("89100000001"))
+                .andExpect(jsonPath(prefix + ".email").value("guseva@test.local"))
+                .andExpect(jsonPath(prefix + ".passportSeries").doesNotExist())
+                .andExpect(jsonPath(prefix + ".passportNumber").doesNotExist())
+                .andExpect(jsonPath(prefix + ".skills").doesNotExist())
+                .andExpect(jsonPath(prefix + ".address").doesNotExist())
+                .andExpect(jsonPath(prefix + ".birthDate").doesNotExist())
+                .andExpect(jsonPath(prefix + ".registrationDate").doesNotExist())
+                .andExpect(jsonPath(prefix + ".active").doesNotExist());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"ADMIN", "COORDINATOR", "CURATOR,COORDINATOR"})
+    void coordinatorAndAdminSeeFullProfileWithPassport(String roles) throws Exception {
+        mvc.perform(signed(MockMvcRequestBuilders.get("/volunteers/5"), roles))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.passportSeries").value("1234"))
+                .andExpect(jsonPath("$.passportNumber").value("567890"))
+                .andExpect(jsonPath("$.skills").value("Фотосъёмка"))
+                .andExpect(jsonPath("$.active").value(true));
+    }
+
+    @Test
+    void curatorCannotSearchBySkills() throws Exception {
+        mvc.perform(signed(MockMvcRequestBuilders.get("/volunteers").param("skills", "фото"), "CURATOR"))
+                .andExpect(status().isForbidden());
+        mvc.perform(signed(MockMvcRequestBuilders.get("/volunteers").param("skills", "фото"), "COORDINATOR"))
+                .andExpect(status().isOk());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidVolunteerBodies")
+    void invalidVolunteerDataIsBadRequest(String body) throws Exception {
+        mvc.perform(signed(MockMvcRequestBuilders.post("/volunteers")
+                        .contentType(MediaType.APPLICATION_JSON).content(body), "COORDINATOR"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    static Stream<String> invalidVolunteerBodies() {
+        return Stream.of(
+                "{\"fullName\":\" \"}",
+                "{\"fullName\":\"Гусева\",\"phone\":\"12345\"}",
+                "{\"fullName\":\"Гусева\",\"phone\":\"+79991234567\",\"email\":\"не-почта\"}",
+                "{\"fullName\":\"Гусева\",\"passportSeries\":\"123\",\"passportNumber\":\"567890\"}",
+                "{\"fullName\":\"Гусева\",\"passportSeries\":\"1234\",\"passportNumber\":\"56789A\"}"
+        );
+    }
+
+    @Test
+    void eventWithoutDateIsBadRequest() throws Exception {
+        mvc.perform(signed(MockMvcRequestBuilders.post("/events")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Выставка\"}"), "ADOPTION_MANAGER"))
+                .andExpect(status().isBadRequest());
     }
 
     @ParameterizedTest(name = "{0} — {1}")

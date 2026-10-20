@@ -121,6 +121,11 @@ public class Volunteer extends TableImpl<VolunteerRecord> {
      */
     public final TableField<VolunteerRecord, OffsetDateTime> UPDATED_AT = createField(DSL.name("updated_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false).defaultValue(DSL.field(DSL.raw("now()"), SQLDataType.TIMESTAMPWITHTIMEZONE)), this, "");
 
+    /**
+     * The column <code>shelter_schema.volunteer.is_active</code>.
+     */
+    public final TableField<VolunteerRecord, Boolean> IS_ACTIVE = createField(DSL.name("is_active"), SQLDataType.BOOLEAN.nullable(false).defaultValue(DSL.field(DSL.raw("true"), SQLDataType.BOOLEAN)), this, "");
+
     private Volunteer(Name alias, Table<VolunteerRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
     }

@@ -44,6 +44,12 @@ public class EmployeeRepository {
                 .fetchOptional(EMPLOYEE.ID);
     }
 
+    /** Работает ли сотрудник: пусто — сотрудника нет, false — уволен. */
+    public Optional<Boolean> findWorking(Long employeeId) {
+        return dsl.select(EMPLOYEE.TERMINATION_DATE).from(EMPLOYEE).where(EMPLOYEE.ID.eq(employeeId))
+                .fetchOptional(r -> r.value1() == null);
+    }
+
     /** ФИО и должность — то, что о сотруднике видят остальные роли. */
     public Optional<EmployeeBrief> findBrief(Long employeeId) {
         return dsl.select(EMPLOYEE.ID, EMPLOYEE.FULL_NAME, POSITION.NAME)

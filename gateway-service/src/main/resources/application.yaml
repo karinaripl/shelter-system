@@ -19,7 +19,7 @@ spring:
             - id: shelter-core-service
               uri: ${SHELTER_CORE_SERVICE_URL:http://localhost:8184}
               predicates:
-                - Path=/animals/**,/cages/**,/animal-statuses/**,/arrival-sources/**,/public/**,/admin/employees/**,/medical-records/**,/procedures/**,/procedure-types/**,/products/**,/product-categories/**,/warehouses/**,/suppliers/**,/supplies/**,/goods-donations/**,/benefactors/**,/expenses/**,/stock-transfers/**,/write-offs/**,/reports/**
+                - Path=/animals/**,/cages/**,/animal-statuses/**,/arrival-sources/**,/public/**,/admin/employees/**,/medical-records/**,/procedures/**,/procedure-types/**,/products/**,/product-categories/**,/warehouses/**,/suppliers/**,/supplies/**,/goods-donations/**,/benefactors/**,/expenses/**,/stock-transfers/**,/write-offs/**,/reports/**,/volunteers/**,/volunteer-assignments/**,/events/**
             - id: booking-service
               uri: ${BOOKING_SERVICE_URL:http://localhost:8181}
               predicates:

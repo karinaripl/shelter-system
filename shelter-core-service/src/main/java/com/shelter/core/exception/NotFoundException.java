@@ -27,6 +27,18 @@ public class NotFoundException extends RuntimeException {
         return new NotFoundException("Вид процедуры с id=" + id + " не найден");
     }
 
+    public static NotFoundException volunteer(Long id) {
+        return new NotFoundException("Волонтёр с id=" + id + " не найден");
+    }
+
+    public static NotFoundException assignment(Long id) {
+        return new NotFoundException("Закрепление с id=" + id + " не найдено");
+    }
+
+    public static NotFoundException event(Long id) {
+        return new NotFoundException("Мероприятие с id=" + id + " не найдено");
+    }
+
     public static NotFoundException photo(Long id) {
         return new NotFoundException("Фото с id=" + id + " не найдено");
     }

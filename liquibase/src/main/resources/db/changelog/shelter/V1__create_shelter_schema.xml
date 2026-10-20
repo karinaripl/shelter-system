@@ -136,4 +136,12 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="shelter-V17" author="olga">
+        <comment>Волонтёры: признак «активен» (ушедший волонтёр не удаляется, а скрывается из списков)</comment>
+        <sqlFile path="db/changelog/shelter/V17__volunteer_active.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/shelter/V17__volunteer_active_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

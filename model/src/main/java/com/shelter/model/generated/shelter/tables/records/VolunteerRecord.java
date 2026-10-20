@@ -189,6 +189,20 @@ public class VolunteerRecord extends UpdatableRecordImpl<VolunteerRecord> {
         return (OffsetDateTime) get(11);
     }
 
+    /**
+     * Setter for <code>shelter_schema.volunteer.is_active</code>.
+     */
+    public void setIsActive(Boolean value) {
+        set(12, value);
+    }
+
+    /**
+     * Getter for <code>shelter_schema.volunteer.is_active</code>.
+     */
+    public Boolean getIsActive() {
+        return (Boolean) get(12);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -212,7 +226,7 @@ public class VolunteerRecord extends UpdatableRecordImpl<VolunteerRecord> {
     /**
      * Create a detached, initialised VolunteerRecord
      */
-    public VolunteerRecord(Long id, String fullName, String phone, String email, String address, LocalDate birthDate, LocalDate registrationDate, String skills, String passportSeries, String passportNumber, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+    public VolunteerRecord(Long id, String fullName, String phone, String email, String address, LocalDate birthDate, LocalDate registrationDate, String skills, String passportSeries, String passportNumber, OffsetDateTime createdAt, OffsetDateTime updatedAt, Boolean isActive) {
         super(Volunteer.VOLUNTEER);
 
         setId(id);
@@ -227,6 +241,7 @@ public class VolunteerRecord extends UpdatableRecordImpl<VolunteerRecord> {
         setPassportNumber(passportNumber);
         setCreatedAt(createdAt);
         setUpdatedAt(updatedAt);
+        setIsActive(isActive);
         resetTouchedOnNotNull();
     }
 }
