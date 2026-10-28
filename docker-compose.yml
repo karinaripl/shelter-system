@@ -13,6 +13,7 @@
 #                  → сервисы → gateway.
 # Снаружи доступны только шлюз (8766) и база (5433). Остальные сервисы видны
 # только внутри docker-сети, поэтому пути /internal/** извне недоступны.
+# Кроме того, /internal/** в auth-service требует заголовок X-Internal-Token (INTERNAL_API_TOKEN).
 
 x-java-env: &java-env
   DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-shelter}
@@ -72,6 +73,11 @@ services:
       # Значения по умолчанию подходят только для локального запуска
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@shelter.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+      # Срок жизни JWT, мс (8 часов)
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-28800000}
+      # Общий секрет внутреннего API /internal/** (заголовок X-Internal-Token). Значение по умолчанию —
+      # только для локального запуска; то же значение должно быть у shelter-core-service
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-only-internal-token-change-me}
     depends_on: *after-migrations
 
   room-service:
@@ -116,6 +122,9 @@ services:
       <<: *java-env
       # Файлы фото животных — в volume, в образ и в git не попадают
       PHOTOS_DIR: /data/photos
+      # Учётные записи сотрудников создаются и блокируются через /internal/users
+      AUTH_SERVICE_URL: http://auth-service:8180
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-only-internal-token-change-me}
     volumes:
       - shelter-photos:/data/photos
     depends_on: *after-migrations

@@ -1,0 +1,2326 @@
+{
+   "info" : {
+      "description" : "Сквозной сценарий админ-панели шага 6.2 (администратор admin@shelter.local / admin12345, демо-учётки с паролем demo12345): должность → сотрудник с учётной записью (повтор с тем же Idempotency-Key — та же карточка) → новый сотрудник входит и видит роль → денежное пожертвование → баланс вырос → куратор создаёт поставку → ADMIN видит её в неоплаченных и оплачивает → баланс уменьшился → повторная оплата 409 → оплата сверх баланса 409 → предварительный расчёт зарплаты → начисление → повтор 409 → увольнение → уволенный не может войти → отчёты. Негативные проверки матрицы доступа и правил. В конце начисление за месяц отменяется — прогон можно повторить.",
+      "name" : "Shelter — шаг 6.2: сотрудники и финансы",
+      "schema" : "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+   },
+   "item" : [
+      {
+         "item" : [
+            {
+               "event" : [
+                  {
+                     "listen" : "prerequest",
+                     "script" : {
+                        "exec" : [
+                           "// Суффикс прогона, ключ запроса и даты (UTC, как на сервере в Docker)",
+                           "pm.collectionVariables.set('run', Date.now().toString(36));",
+                           "pm.collectionVariables.set('createKey', pm.variables.replaceIn('{{$guid}}'));",
+                           "pm.collectionVariables.set('duplicateKey', pm.variables.replaceIn('{{$guid}}'));",
+                           "const now = new Date();",
+                           "const pad = (n) => String(n).padStart(2, \"0\");",
+                           "const month = now.getUTCFullYear() + '-' + pad(now.getUTCMonth() + 1);",
+                           "const lastDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();",
+                           "pm.collectionVariables.set('today', now.toISOString().slice(0, 10));",
+                           "pm.collectionVariables.set('month', month);",
+                           "pm.collectionVariables.set('monthStart', month + '-01');",
+                           "pm.collectionVariables.set('monthEnd', month + '-' + pad(lastDay));",
+                           "pm.collectionVariables.set('passportSeries', String(1000 + Math.floor(Math.random() * 9000)));",
+                           "pm.collectionVariables.set('passportNumber', String(100000 + Math.floor(Math.random() * 900000)));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  },
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.collectionVariables.set('adminToken', pm.response.json().token);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Вход администратора",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"email\":\"{{adminEmail}}\",\"password\":\"{{adminPassword}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/auth/login"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.collectionVariables.set('curatorToken', pm.response.json().token);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Вход куратора",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"email\":\"{{curatorEmail}}\",\"password\":\"{{demoPassword}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/auth/login"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.collectionVariables.set('vetToken', pm.response.json().token);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Вход ветеринара",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"email\":\"{{vetEmail}}\",\"password\":\"{{demoPassword}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/auth/login"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.collectionVariables.set('managerToken', pm.response.json().token);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Вход менеджера по пристройству",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"email\":\"{{managerEmail}}\",\"password\":\"{{demoPassword}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/auth/login"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.collectionVariables.set('coordinatorToken', pm.response.json().token);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Вход координатора",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"email\":\"{{coordinatorEmail}}\",\"password\":\"{{demoPassword}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/auth/login"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('201', () => pm.response.to.have.status(201));",
+                           "pm.collectionVariables.set('visitorToken', pm.response.json().token);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Регистрация посетителя",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"username\":\"visitor-{{run}}\",\"email\":\"visitor-{{run}}@test.local\",\"password\":\"password1\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/auth/register"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "const accrued = pm.response.code === 200;",
+                           "pm.test('за месяц ' + pm.collectionVariables.get('month') + ' нет начисления: коллекция начисляет и отменяет его сама. ' + 'Если начисление сделано вручную, отмените его (DELETE /admin/salaries/{month}) и запустите снова', () => pm.expect(accrued).to.be.false);",
+                           "if (accrued) { postman.setNextRequest(null); }"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Зарплата за текущий месяц ещё не начислена (иначе прогон остановится)",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/salaries/{{month}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.collectionVariables.set('warehouseId', pm.response.json()[0].id);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Куратор: склад для поставок",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{curatorToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/warehouses"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.collectionVariables.set('categoryId', pm.response.json()[0].id);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Куратор: категория товара",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{curatorToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/product-categories"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('201', () => pm.response.to.have.status(201));",
+                           "pm.collectionVariables.set('productId', pm.response.json().id);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Куратор создаёт товар",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"name\":\"Корм 6.2 {{run}}\",\"categoryId\":{{categoryId}},\"unitOfMeasure\":\"кг\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{curatorToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/products"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('201', () => pm.response.to.have.status(201));",
+                           "pm.collectionVariables.set('supplierId', pm.response.json().id);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Куратор создаёт поставщика",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"name\":\"Поставщик {{run}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{curatorToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/suppliers"
+               }
+            }
+         ],
+         "name" : "Подготовка"
+      },
+      {
+         "item" : [
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('201', () => pm.response.to.have.status(201));",
+                           "const p = pm.response.json(); pm.collectionVariables.set('positionId', p.id);",
+                           "pm.test('оклад с двумя знаками', () => pm.expect(p.baseSalary).to.eql(45000.00));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "ADMIN создаёт должность",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"name\":\"Санитар {{run}}\",\"baseSalary\":45000}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/positions"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('409', () => pm.response.to.have.status(409));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Негатив: та же должность в другом регистре → 409",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"name\":\"САНИТАР {{run}}\",\"baseSalary\":1}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/positions"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('201', () => pm.response.to.have.status(201));",
+                           "const e = pm.response.json();",
+                           "pm.collectionVariables.set('employeeId', e.id); pm.collectionVariables.set('employeeUserId', e.userId);",
+                           "pm.test('карточка с паспортом и окладом', () => { pm.expect(e.passportNumber).to.eql(pm.collectionVariables.get('passportNumber')); pm.expect(e.baseSalary).to.eql(45000); pm.expect(e.working).to.be.true; });",
+                           "pm.test('учётная запись создана и связана', () => { pm.expect(e.userId).to.be.a('number'); pm.expect(e.account.username).to.eql('emp-' + pm.collectionVariables.get('run')); pm.expect(e.account.roles).to.eql(['CURATOR']); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "ADMIN создаёт сотрудника с учётной записью",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"employee\":{\"fullName\":\"Новикова Анна {{run}}\",\"positionId\":{{positionId}},\"hireDate\":\"{{today}}\",\"weeklyHours\":40,\"phone\":\"+79990001122\",\"address\":\"Москва, ул. Лесная, 1\",\"passportSeries\":\"{{passportSeries}}\",\"passportNumber\":\"{{passportNumber}}\"},\"account\":{\"username\":\"emp-{{run}}\",\"email\":\"emp-{{run}}@test.local\",\"password\":\"password1\",\"roles\":[\"CURATOR\"]}}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     },
+                     {
+                        "key" : "Idempotency-Key",
+                        "value" : "{{createKey}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/employees"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.test('та же карточка', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('employeeId')));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Повтор с тем же Idempotency-Key → 200, та же карточка",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"employee\":{\"fullName\":\"Новикова Анна {{run}}\",\"positionId\":{{positionId}},\"hireDate\":\"{{today}}\",\"weeklyHours\":40,\"phone\":\"+79990001122\",\"address\":\"Москва, ул. Лесная, 1\",\"passportSeries\":\"{{passportSeries}}\",\"passportNumber\":\"{{passportNumber}}\"},\"account\":{\"username\":\"emp-{{run}}\",\"email\":\"emp-{{run}}@test.local\",\"password\":\"password1\",\"roles\":[\"CURATOR\"]}}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     },
+                     {
+                        "key" : "Idempotency-Key",
+                        "value" : "{{createKey}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/employees"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.collectionVariables.set('employeeToken', pm.response.json().token);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Новый сотрудник входит",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"email\":\"emp-{{run}}@test.local\",\"password\":\"password1\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/auth/login"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.test('роль CURATOR', () => pm.expect(pm.response.json().roles).to.eql(['CURATOR']));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Новый сотрудник видит свою роль",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{employeeToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/auth/me"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.test('найден один', () => pm.expect(pm.response.json().length).to.eql(1));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Список сотрудников с поиском",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/employees?search={{run}}&status=WORKING"
+               }
+            }
+         ],
+         "name" : "Сотрудники"
+      },
+      {
+         "item" : [
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.collectionVariables.set('balanceBefore', pm.response.json().balance);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Баланс до операций",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/balance"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.collectionVariables.set('salaryTotal', pm.response.json().total);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Предварительный расчёт зарплаты (для суммы пожертвования)",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/salaries/preview?month={{month}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('201', () => pm.response.to.have.status(201));",
+                           "const s = pm.response.json(); pm.collectionVariables.set('supplyId', s.id);",
+                           "pm.test('не оплачена, куратор не видит суммы', () => { pm.expect(s.paid).to.be.false; pm.expect(s).to.not.have.property('totalAmount'); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Куратор создаёт поставку (1 505.00)",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"supplierId\":{{supplierId}},\"warehouseId\":{{warehouseId}},\"items\":[{\"productId\":{{productId}},\"quantity\":10,\"unitPrice\":150.50}]}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{curatorToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/supplies"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "prerequest",
+                     "script" : {
+                        "exec" : [
+                           "// Пожертвование покрывает поставку и зарплату за месяц — прогон проходит при любом балансе",
+                           "const amount = (Number(pm.collectionVariables.get('salaryTotal')) + 1505 + 1000).toFixed(2);",
+                           "pm.collectionVariables.set('donationAmount', amount);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  },
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('201', () => pm.response.to.have.status(201));",
+                           "const d = pm.response.json(); pm.collectionVariables.set('donationId', d.id);",
+                           "pm.collectionVariables.set('benefactorId', d.benefactor.id);",
+                           "pm.test('денежное, с операцией прихода', () => { pm.expect(d.type).to.eql('MONEY'); pm.expect(d.transactionId).to.be.a('number'); pm.expect(d.amount).to.eql(Number(pm.collectionVariables.get('donationAmount'))); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "ADMIN: денежное пожертвование (новый благотворитель по имени)",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"benefactorName\":\"Благотворитель {{run}}\",\"amount\":{{donationAmount}},\"notes\":\"Перевод на карту\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/donations"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "const expected = (Number(pm.collectionVariables.get('balanceBefore')) + Number(pm.collectionVariables.get('donationAmount'))).toFixed(2);",
+                           "pm.test('баланс + пожертвование', () => pm.expect(pm.response.json().balance.toFixed(2)).to.eql(expected));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Баланс вырос на сумму пожертвования",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/balance"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "const s = pm.response.json().find(x => x.id === pm.collectionVariables.get('supplyId'));",
+                           "pm.test('в списке, сумма 1505.00', () => { pm.expect(s).to.be.an('object'); pm.expect(s.totalAmount).to.eql(1505); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "ADMIN видит поставку в неоплаченных с суммой",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/supplies/unpaid"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('201', () => pm.response.to.have.status(201));",
+                           "const p = pm.response.json(); pm.collectionVariables.set('paymentTransactionId', p.transactionId);",
+                           "pm.test('сумма = сумма поставки', () => pm.expect(p.amount).to.eql(1505));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "ADMIN оплачивает поставку",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"paymentDate\":\"{{today}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/supplies/{{supplyId}}/payment"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "const expected = (Number(pm.collectionVariables.get('balanceBefore')) + Number(pm.collectionVariables.get('donationAmount')) - 1505).toFixed(2);",
+                           "pm.test('баланс + пожертвование − оплата', () => pm.expect(pm.response.json().balance.toFixed(2)).to.eql(expected));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Баланс уменьшился на сумму поставки",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/balance"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "const t = pm.response.json().content.find(x => x.id === pm.collectionVariables.get('paymentTransactionId'));",
+                           "pm.test('расход PURCHASE поставки', () => { pm.expect(t.direction).to.eql('EXPENSE'); pm.expect(t.supplyId).to.eql(pm.collectionVariables.get('supplyId')); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Журнал: оплата — операция PURCHASE со ссылкой на поставку",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/transactions?category=PURCHASE&from={{today}}&to={{today}}&size=100"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('409', () => pm.response.to.have.status(409));",
+                           "pm.test('уже оплачена', () => pm.expect(pm.response.json().message).to.include('уже оплачена'));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Негатив: повторная оплата → 409",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/supplies/{{supplyId}}/payment"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('201', () => pm.response.to.have.status(201));",
+                           "pm.collectionVariables.set('bigSupplyId', pm.response.json().id);"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Куратор создаёт дорогую поставку",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"supplierId\":{{supplierId}},\"warehouseId\":{{warehouseId}},\"items\":[{\"productId\":{{productId}},\"quantity\":1000,\"unitPrice\":9999999.99}]}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{curatorToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/supplies"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('409', () => pm.response.to.have.status(409));",
+                           "pm.test('сообщение с балансом', () => { const m = pm.response.json().message; pm.expect(m).to.include('Недостаточно средств'); pm.expect(m).to.include('текущий баланс'); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Негатив: оплата сверх баланса → 409 с текущим балансом",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/supplies/{{bigSupplyId}}/payment"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('204', () => pm.response.to.have.status(204));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Уборка: куратор удаляет неоплаченную дорогую поставку",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{curatorToken}}"
+                     }
+                  ],
+                  "method" : "DELETE",
+                  "url" : "{{baseUrl}}/supplies/{{bigSupplyId}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('409', () => pm.response.to.have.status(409));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Негатив: операция SALARY вручную → 409",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"direction\":\"EXPENSE\",\"category\":\"SALARY\",\"amount\":100,\"description\":\"Премия\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/finance/transactions"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('201', () => pm.response.to.have.status(201));",
+                           "const t = pm.response.json(); pm.collectionVariables.set('manualId', t.id);",
+                           "pm.test('категория OTHER', () => pm.expect(t.category).to.eql('OTHER'));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Ручной расход OTHER (ремонт клеток)",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"direction\":\"EXPENSE\",\"amount\":250.75,\"description\":\"Ремонт клеток {{run}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/finance/transactions"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('204', () => pm.response.to.have.status(204));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Удаление ручной операции",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "DELETE",
+                  "url" : "{{baseUrl}}/admin/finance/transactions/{{manualId}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('409', () => pm.response.to.have.status(409));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Негатив: удалить операцию оплаты из журнала → 409",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "DELETE",
+                  "url" : "{{baseUrl}}/admin/finance/transactions/{{paymentTransactionId}}"
+               }
+            }
+         ],
+         "name" : "Пожертвования, оплата поставок, журнал"
+      },
+      {
+         "item" : [
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "const p = pm.response.json(); pm.collectionVariables.set('salaryTotal', p.total);",
+                           "const mine = p.employees.find(e => e.employeeId === pm.collectionVariables.get('employeeId'));",
+                           "pm.test('новый сотрудник — пропорционально дням', () => { pm.expect(mine.workedDays).to.match(/^\\d+ из \\d+ дней$/); pm.expect(mine.daysWorked).to.be.below(mine.daysInMonth + 1); });",
+                           "pm.test('денег хватает, не начислено', () => { pm.expect(p.enough).to.be.true; pm.expect(p.alreadyAccrued).to.be.false; pm.expect(p.accruedOn).to.be.null; });",
+                           "pm.test('за какой месяц и когда выплачено — разные поля: месяц текущий, дата — сегодня', () => { pm.expect(p.periodMonth).to.eql(pm.collectionVariables.get('month')); pm.expect(p.paymentDate).to.eql(pm.collectionVariables.get('today')); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Предварительный расчёт зарплаты за месяц",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/salaries/preview?month={{month}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('201', () => pm.response.to.have.status(201));",
+                           "const a = pm.response.json();",
+                           "pm.test('сумма = предпросмотр, у каждого операция', () => { pm.expect(a.total).to.eql(Number(pm.collectionVariables.get('salaryTotal'))); a.employees.forEach(e => pm.expect(e.transactionId).to.be.a('number')); });",
+                           "pm.test('операции датированы сегодня, без будущих дат', () => { pm.expect(a.periodMonth).to.eql(pm.collectionVariables.get('month')); pm.expect(a.paymentDate).to.eql(pm.collectionVariables.get('today')); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Начисление зарплаты за месяц",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"month\":\"{{month}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/salaries"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "const p = pm.response.json();",
+                           "pm.test('уже начислено сегодня', () => { pm.expect(p.alreadyAccrued).to.be.true; pm.expect(p.accruedOn).to.eql(pm.collectionVariables.get('today')); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Предпросмотр после начисления: когда начислено",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/salaries/preview?month={{month}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('409', () => pm.response.to.have.status(409));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Негатив: повторное начисление → 409",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"month\":\"{{month}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/salaries"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('400', () => pm.response.to.have.status(400));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Негатив: зарплата за будущий месяц → 400",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/salaries/preview?month=2099-01"
+               }
+            }
+         ],
+         "name" : "Зарплата"
+      },
+      {
+         "item" : [
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.test('уволен, вход заблокирован', () => { const e = pm.response.json(); pm.expect(e.working).to.be.false; pm.expect(e.account.enabled).to.be.false; });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Увольнение сотрудника",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"terminationDate\":\"{{today}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/employees/{{employeeId}}/termination"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Уволенный не может войти → 403",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"email\":\"emp-{{run}}@test.local\",\"password\":\"password1\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/auth/login"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('409', () => pm.response.to.have.status(409));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Негатив: уволить повторно → 409",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"terminationDate\":\"{{today}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/employees/{{employeeId}}/termination"
+               }
+            }
+         ],
+         "name" : "Увольнение"
+      },
+      {
+         "item" : [
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "const r = pm.response.json();",
+                           "pm.test('категории прихода и расхода', () => { pm.expect(r.income.map(c => c.category)).to.include('DONATION'); pm.expect(r.expense.map(c => c.category)).to.include.members(['PURCHASE', 'SALARY']); });",
+                           "pm.test('зарплата в периоде выплаты — с месяцем, за который начислена', () => { const s = r.salaries.find(x => x.periodMonth === pm.collectionVariables.get('month')); pm.expect(s.amount).to.eql(Number(pm.collectionVariables.get('salaryTotal'))); pm.expect(s.employees).to.be.above(0); });",
+                           "pm.test('баланс на конец = начало + приход − расход', () => pm.expect((r.openingBalance + r.totalIncome - r.totalExpense).toFixed(2)).to.eql(r.closingBalance.toFixed(2)));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Отчёт: приход и расход по категориям за месяц",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/reports/finance/categories?from={{monthStart}}&to={{monthEnd}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "const r = pm.response.json();",
+                           "pm.test('12 месяцев, последний — текущий', () => { pm.expect(r.months.length).to.eql(12); pm.expect(r.months[11].month).to.eql(pm.collectionVariables.get('month')); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Отчёт по месяцам (для графика)",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/reports/finance/monthly"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "const r = pm.response.json();",
+                           "pm.test('сходится', () => pm.expect((r.openingBalance + r.income - r.expense).toFixed(2)).to.eql(r.closingBalance.toFixed(2)));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Баланс на начало и конец периода",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/reports/finance/balance?from={{monthStart}}&to={{monthEnd}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "const row = pm.response.json().benefactors.find(b => b.benefactor && b.benefactor.id === pm.collectionVariables.get('benefactorId'));",
+                           "pm.test('наш благотворитель с суммой', () => pm.expect(row.moneyTotal).to.eql(Number(pm.collectionVariables.get('donationAmount'))));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Пожертвования по благотворителям",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/reports/donations/benefactors?from={{monthStart}}&to={{monthEnd}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.test('одно денежное', () => { const c = pm.response.json().content; pm.expect(c.length).to.eql(1); pm.expect(c[0].type).to.eql('MONEY'); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Список пожертвований с фильтром по благотворителю",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/donations?benefactorId={{benefactorId}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.test('без контактов', () => { const b = pm.response.json()[0]; pm.expect(b).to.have.keys('id', 'fullName'); });"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Куратор по-прежнему видит только имена благотворителей",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{curatorToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/benefactors?name={{run}}"
+               }
+            }
+         ],
+         "name" : "Отчёты"
+      },
+      {
+         "item" : [
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));",
+                           "pm.test('общий формат ошибки', () => pm.expect(pm.response.json().message).to.eql('Недостаточно прав для этого действия'));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "ветеринар → GET /admin/finance/balance → 403",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{vetToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/balance"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "ветеринар → POST /admin/finance/transactions → 403",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"direction\":\"INCOME\",\"amount\":1,\"description\":\"x\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{vetToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/finance/transactions"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));",
+                           "pm.test('общий формат ошибки', () => pm.expect(pm.response.json().message).to.eql('Недостаточно прав для этого действия'));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "куратор → GET /admin/finance/balance → 403",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{curatorToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/balance"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "куратор → POST /admin/finance/transactions → 403",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"direction\":\"INCOME\",\"amount\":1,\"description\":\"x\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{curatorToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/finance/transactions"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));",
+                           "pm.test('общий формат ошибки', () => pm.expect(pm.response.json().message).to.eql('Недостаточно прав для этого действия'));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "менеджер → GET /admin/finance/balance → 403",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{managerToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/balance"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "менеджер → POST /admin/finance/transactions → 403",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"direction\":\"INCOME\",\"amount\":1,\"description\":\"x\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{managerToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/finance/transactions"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));",
+                           "pm.test('общий формат ошибки', () => pm.expect(pm.response.json().message).to.eql('Недостаточно прав для этого действия'));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "координатор → GET /admin/finance/balance → 403",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{coordinatorToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/balance"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "координатор → POST /admin/finance/transactions → 403",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"direction\":\"INCOME\",\"amount\":1,\"description\":\"x\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{coordinatorToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/finance/transactions"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));",
+                           "pm.test('общий формат ошибки', () => pm.expect(pm.response.json().message).to.eql('Недостаточно прав для этого действия'));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "посетитель → GET /admin/finance/balance → 403",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{visitorToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/balance"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "посетитель → POST /admin/finance/transactions → 403",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"direction\":\"INCOME\",\"amount\":1,\"description\":\"x\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{visitorToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/finance/transactions"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));",
+                           "pm.test('общий формат ошибки', () => pm.expect(pm.response.json().message).to.eql('Недостаточно прав для этого действия'));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "уволенный сотрудник (старый токен) → GET /admin/finance/balance → 403",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{employeeToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/balance"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "уволенный сотрудник (старый токен) → POST /admin/finance/transactions → 403",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"direction\":\"INCOME\",\"amount\":1,\"description\":\"x\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{employeeToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/finance/transactions"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "куратор → POST /admin/supplies/{id}/payment → 403",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{curatorToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/supplies/{{supplyId}}/payment"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "координатор → POST /admin/salaries → 403",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"month\":\"{{month}}\"}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{coordinatorToken}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/salaries"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('403', () => pm.response.to.have.status(403));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "менеджер → GET /admin/reports/finance/categories → 403",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{managerToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/reports/finance/categories"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('401', () => pm.response.to.have.status(401));",
+                           "pm.test('Требуется авторизация', () => pm.expect(pm.response.json().message).to.eql('Требуется авторизация'));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "без токена → GET /admin/finance/balance → 401",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/balance"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('409', () => pm.response.to.have.status(409));",
+                           "pm.test('сообщение auth-service', () => pm.expect(pm.response.json().message).to.include('уже существует'));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Негатив: сотрудник с занятым username → 409",
+               "request" : {
+                  "body" : {
+                     "mode" : "raw",
+                     "raw" : "{\"employee\":{\"fullName\":\"Дубль {{run}}\",\"positionId\":{{positionId}}},\"account\":{\"username\":\"emp-{{run}}\",\"email\":\"other-{{run}}@test.local\",\"password\":\"password1\",\"roles\":[\"VET\"]}}"
+                  },
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     },
+                     {
+                        "key" : "Idempotency-Key",
+                        "value" : "{{duplicateKey}}"
+                     }
+                  ],
+                  "method" : "POST",
+                  "url" : "{{baseUrl}}/admin/employees"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "pm.test('пусто', () => pm.expect(pm.response.json()).to.eql([]));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Карточка «Дубль» не создана",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/employees?search=Дубль {{run}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('409', () => pm.response.to.have.status(409));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Негатив: должность с сотрудником не удаляется → 409",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "DELETE",
+                  "url" : "{{baseUrl}}/admin/positions/{{positionId}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('409', () => pm.response.to.have.status(409));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Негатив: благотворителя с пожертвованием не удалить → 409",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "DELETE",
+                  "url" : "{{baseUrl}}/admin/benefactors/{{benefactorId}}"
+               }
+            }
+         ],
+         "name" : "Негативные проверки"
+      },
+      {
+         "item" : [
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('204', () => pm.response.to.have.status(204));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Отмена начисления за месяц (прогон можно повторить)",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "DELETE",
+                  "url" : "{{baseUrl}}/admin/salaries/{{month}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('404', () => pm.response.to.have.status(404));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Начисления за месяц больше нет",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/salaries/{{month}}"
+               }
+            },
+            {
+               "event" : [
+                  {
+                     "listen" : "test",
+                     "script" : {
+                        "exec" : [
+                           "pm.test('200', () => pm.response.to.have.status(200));",
+                           "const expected = (Number(pm.collectionVariables.get('balanceBefore')) + Number(pm.collectionVariables.get('donationAmount')) - 1505).toFixed(2);",
+                           "pm.test('сходится', () => pm.expect(pm.response.json().balance.toFixed(2)).to.eql(expected));"
+                        ],
+                        "type" : "text/javascript"
+                     }
+                  }
+               ],
+               "name" : "Итоговый баланс: + пожертвование − оплата поставки",
+               "request" : {
+                  "header" : [
+                     {
+                        "key" : "Content-Type",
+                        "value" : "application/json"
+                     },
+                     {
+                        "key" : "Authorization",
+                        "value" : "Bearer {{adminToken}}"
+                     }
+                  ],
+                  "method" : "GET",
+                  "url" : "{{baseUrl}}/admin/finance/balance"
+               }
+            }
+         ],
+         "name" : "Уборка"
+      }
+   ],
+   "variable" : [
+      {
+         "key" : "baseUrl",
+         "value" : "http://localhost:8766"
+      },
+      {
+         "key" : "adminEmail",
+         "value" : "admin@shelter.local"
+      },
+      {
+         "key" : "adminPassword",
+         "value" : "admin12345"
+      },
+      {
+         "key" : "curatorEmail",
+         "value" : "fedorov@demo.shelter.local"
+      },
+      {
+         "key" : "vetEmail",
+         "value" : "lebedev@demo.shelter.local"
+      },
+      {
+         "key" : "managerEmail",
+         "value" : "orlova@demo.shelter.local"
+      },
+      {
+         "key" : "coordinatorEmail",
+         "value" : "belova@demo.shelter.local"
+      },
+      {
+         "key" : "demoPassword",
+         "value" : "demo12345"
+      }
+   ]
+}

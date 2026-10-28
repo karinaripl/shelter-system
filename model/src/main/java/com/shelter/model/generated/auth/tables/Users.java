@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 import org.jooq.Condition;
 import org.jooq.Field;
@@ -88,6 +89,11 @@ public class Users extends TableImpl<UsersRecord> {
      */
     public final TableField<UsersRecord, Boolean> ENABLED = createField(DSL.name("enabled"), SQLDataType.BOOLEAN.nullable(false).defaultValue(DSL.field(DSL.raw("true"), SQLDataType.BOOLEAN)), this, "");
 
+    /**
+     * The column <code>users_schema.users.creation_request_id</code>.
+     */
+    public final TableField<UsersRecord, UUID> CREATION_REQUEST_ID = createField(DSL.name("creation_request_id"), SQLDataType.UUID, this, "");
+
     private Users(Name alias, Table<UsersRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
     }
@@ -162,7 +168,7 @@ public class Users extends TableImpl<UsersRecord> {
 
     @Override
     public List<UniqueKey<UsersRecord>> getUniqueKeys() {
-        return Arrays.asList(Keys.USERS_EMAIL_KEY, Keys.USERS_USERNAME_KEY);
+        return Arrays.asList(Keys.USERS_CREATION_REQUEST_ID_KEY, Keys.USERS_EMAIL_KEY, Keys.USERS_USERNAME_KEY);
     }
 
     private transient UserRolesPath _userRoles;

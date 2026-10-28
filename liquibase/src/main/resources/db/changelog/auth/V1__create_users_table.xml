@@ -34,4 +34,12 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="auth-V5" author="olga">
+        <comment>Ключ запроса создания учётной записи через внутренний API (идемпотентность, компенсация)</comment>
+        <sqlFile path="db/changelog/auth/V5__creation_request.sql"/>
+        <rollback>
+            <sqlFile path="db/changelog/auth/V5__creation_request_rollback.sql"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

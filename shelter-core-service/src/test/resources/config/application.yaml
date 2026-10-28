@@ -1,3 +1,6 @@
 # Настройки только для тестов: дополняют основной application.yaml,
 # чтобы тесты не зависели от файла .env
 JWT_SECRET: test-only-secret-0123456789abcdef0123456789
+
+# Общий секрет внутреннего API /internal/** (заголовок X-Internal-Token)
+INTERNAL_API_TOKEN: test-only-internal-token

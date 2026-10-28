@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import static com.shelter.model.generated.auth.tables.UserRoles.USER_ROLES;
 import static com.shelter.model.generated.auth.tables.Users.USERS;
@@ -25,13 +26,26 @@ public class UserRepository {
         this.dsl = dsl;
     }
 
-    public UsersRecord insert(String username, String email, String passwordHash) {
+    /** creationRequestId — ключ запроса внутреннего API (null — регистрация или создание администратором). */
+    public UsersRecord insert(String username, String email, String passwordHash, UUID creationRequestId) {
         return dsl.insertInto(USERS)
                 .set(USERS.USERNAME, username)
                 .set(USERS.EMAIL, email)
                 .set(USERS.PASSWORD_HASH, passwordHash)
+                .set(USERS.CREATION_REQUEST_ID, creationRequestId)
                 .returning()
                 .fetchOne();
+    }
+
+    public Optional<UsersRecord> findByCreationRequestId(UUID requestId) {
+        return dsl.selectFrom(USERS)
+                .where(USERS.CREATION_REQUEST_ID.eq(requestId))
+                .fetchOptional();
+    }
+
+    /** Роли удаляются вместе с пользователем (ON DELETE CASCADE). */
+    public void delete(Long id) {
+        dsl.deleteFrom(USERS).where(USERS.ID.eq(id)).execute();
     }
 
     public Optional<UsersRecord> findById(Long id) {

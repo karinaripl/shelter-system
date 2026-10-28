@@ -45,6 +45,12 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnavailable(ServiceUnavailableException ex,
+                                                                 HttpServletRequest request) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(ForbiddenActionException.class)
     public ResponseEntity<Map<String, Object>> handleForbiddenAction(ForbiddenActionException ex,
                                                                      HttpServletRequest request) {

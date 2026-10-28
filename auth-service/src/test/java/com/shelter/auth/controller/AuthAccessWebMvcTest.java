@@ -17,8 +17,10 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -28,6 +30,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthAccessWebMvcTest {
 
     private static final List<String> NOT_ADMIN = List.of("VET", "CURATOR", "ADOPTION_MANAGER", "COORDINATOR", "VISITOR");
+    /** Значение INTERNAL_API_TOKEN из тестового application.yaml. */
+    private static final String INTERNAL_TOKEN = "test-only-internal-token";
 
     @Autowired
     private MockMvc mvc;
@@ -50,6 +54,50 @@ class AuthAccessWebMvcTest {
             }
             mvc.perform(get(path)).andExpect(status().isUnauthorized());
         }
+    }
+
+    /** /internal/** — вызовы shelter-core-service: без заголовков шлюза, но с X-Internal-Token. */
+    @Test
+    void internalUsersApiNeedsNoGatewayHeadersButNeedsInternalToken() throws Exception {
+        org.mockito.Mockito.when(userService.createInternal(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new com.shelter.auth.dto.InternalUserResult(null, true));
+        mvc.perform(internal(post("/internal/users")).contentType(MediaType.APPLICATION_JSON).content("""
+                        {"requestId":"11111111-2222-3333-4444-555555555555","username":"vet","email":"vet@test.local",
+                         "password":"password1","roles":["VET"]}"""))
+                .andExpect(status().isCreated());
+        mvc.perform(internal(get("/internal/users/5"))).andExpect(status().isOk());
+        mvc.perform(internal(put("/internal/users/5/status"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":false}"))
+                .andExpect(status().isOk());
+        mvc.perform(internal(delete("/internal/users/5")).param("requestId", "11111111-2222-3333-4444-555555555555"))
+                .andExpect(status().isNoContent());
+        // Без ключа запроса создать нельзя
+        mvc.perform(internal(post("/internal/users")).contentType(MediaType.APPLICATION_JSON).content("""
+                        {"username":"vet","email":"vet@test.local","password":"password1","roles":["VET"]}"""))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void internalApiWithoutOrWithWrongTokenIsUnauthorized() throws Exception {
+        String body = """
+                {"requestId":"11111111-2222-3333-4444-555555555555","username":"vet","email":"vet@test.local",
+                 "password":"password1","roles":["VET"]}""";
+        List<MockHttpServletRequestBuilder> requests = List.of(
+                post("/internal/users").contentType(MediaType.APPLICATION_JSON).content(body),
+                get("/internal/users/5"),
+                put("/internal/users/5/status").contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":false}"),
+                delete("/internal/users/5").param("requestId", "11111111-2222-3333-4444-555555555555"));
+        for (MockHttpServletRequestBuilder request : requests) {
+            mvc.perform(request).andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.message").value("Требуется внутренний токен сервиса (X-Internal-Token)"));
+        }
+        mvc.perform(get("/internal/users/5").header("X-Internal-Token", "wrong-token"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/internal/users/5").header("X-Internal-Token", ""))
+                .andExpect(status().isUnauthorized());
+        // Подписанные заголовки шлюза, даже администратора, внутренний токен не заменяют
+        mvc.perform(signed(get("/internal/users/5"), "ADMIN")).andExpect(status().isUnauthorized());
+        org.mockito.Mockito.verifyNoInteractions(userService);
     }
 
     @Test
@@ -85,6 +133,10 @@ class AuthAccessWebMvcTest {
         mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.path").value("/auth/login"));
+    }
+
+    private static MockHttpServletRequestBuilder internal(MockHttpServletRequestBuilder builder) {
+        return builder.header("X-Internal-Token", INTERNAL_TOKEN);
     }
 
     private MockHttpServletRequestBuilder signed(MockHttpServletRequestBuilder builder, String roles) {

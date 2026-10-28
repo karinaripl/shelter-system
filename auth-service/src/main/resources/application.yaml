@@ -16,7 +16,11 @@ server:
   port: 8180
 jwt:
   secret: ${JWT_SECRET}
-  expiration: ${JWT_EXPIRATION:86400000}
+  expiration: ${JWT_EXPIRATION:28800000}
+
+# Общий секрет для вызовов /internal/** из других сервисов (заголовок X-Internal-Token)
+internal-api:
+  token: ${INTERNAL_API_TOKEN}
 
 gateway:
   auth:

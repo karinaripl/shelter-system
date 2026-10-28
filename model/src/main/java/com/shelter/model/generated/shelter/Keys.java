@@ -98,6 +98,7 @@ public class Keys {
     public static final UniqueKey<CageRecord> CAGE_NUMBER_KEY = Internal.createUniqueKey(Cage.CAGE, DSL.name("cage_number_key"), new TableField[] { Cage.CAGE.NUMBER }, true);
     public static final UniqueKey<CageRecord> CAGE_PKEY = Internal.createUniqueKey(Cage.CAGE, DSL.name("cage_pkey"), new TableField[] { Cage.CAGE.ID }, true);
     public static final UniqueKey<DonationRecord> DONATION_PKEY = Internal.createUniqueKey(Donation.DONATION, DSL.name("donation_pkey"), new TableField[] { Donation.DONATION.ID }, true);
+    public static final UniqueKey<EmployeeRecord> EMPLOYEE_CREATION_REQUEST_ID_KEY = Internal.createUniqueKey(Employee.EMPLOYEE, DSL.name("employee_creation_request_id_key"), new TableField[] { Employee.EMPLOYEE.CREATION_REQUEST_ID }, true);
     public static final UniqueKey<EmployeeRecord> EMPLOYEE_PKEY = Internal.createUniqueKey(Employee.EMPLOYEE, DSL.name("employee_pkey"), new TableField[] { Employee.EMPLOYEE.ID }, true);
     public static final UniqueKey<EmployeeRecord> EMPLOYEE_USER_ID_KEY = Internal.createUniqueKey(Employee.EMPLOYEE, DSL.name("employee_user_id_key"), new TableField[] { Employee.EMPLOYEE.USER_ID }, true);
     public static final UniqueKey<EmployeeRecord> UQ_EMPLOYEE_PASSPORT = Internal.createUniqueKey(Employee.EMPLOYEE, DSL.name("uq_employee_passport"), new TableField[] { Employee.EMPLOYEE.PASSPORT_SERIES, Employee.EMPLOYEE.PASSPORT_NUMBER }, true);

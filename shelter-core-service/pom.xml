@@ -55,6 +55,12 @@
 			<version>0.0.1-SNAPSHOT</version>
 		</dependency>
 
+		<!-- Вызовы auth-service по /internal/** (учётные записи сотрудников) -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-openfeign</artifactId>
+		</dependency>
+
 		<!-- Тесты -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -75,6 +81,13 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- auth-service в интеграционных тестах создания сотрудника -->
+		<dependency>
+			<groupId>org.wiremock</groupId>
+			<artifactId>wiremock-standalone</artifactId>
+			<version>3.13.1</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

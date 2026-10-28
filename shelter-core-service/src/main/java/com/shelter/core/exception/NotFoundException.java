@@ -39,6 +39,30 @@ public class NotFoundException extends RuntimeException {
         return new NotFoundException("Мероприятие с id=" + id + " не найдено");
     }
 
+    public static NotFoundException transaction(Long id) {
+        return new NotFoundException("Денежная операция с id=" + id + " не найдена");
+    }
+
+    public static NotFoundException position(Long id) {
+        return new NotFoundException("Должность с id=" + id + " не найдена");
+    }
+
+    public static NotFoundException employee(Long id) {
+        return new NotFoundException("Сотрудник с id=" + id + " не найден");
+    }
+
+    public static NotFoundException benefactor(Long id) {
+        return new NotFoundException("Благотворитель с id=" + id + " не найден");
+    }
+
+    public static NotFoundException donation(Long id) {
+        return new NotFoundException("Пожертвование с id=" + id + " не найдено");
+    }
+
+    public static NotFoundException supply(Long id) {
+        return new NotFoundException("Поставка с id=" + id + " не найдена");
+    }
+
     public static NotFoundException photo(Long id) {
         return new NotFoundException("Фото с id=" + id + " не найдено");
     }

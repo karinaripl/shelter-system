@@ -24,6 +24,7 @@ import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 import org.jooq.Check;
 import org.jooq.Condition;
@@ -147,6 +148,11 @@ public class Employee extends TableImpl<EmployeeRecord> {
      */
     public final TableField<EmployeeRecord, OffsetDateTime> UPDATED_AT = createField(DSL.name("updated_at"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false).defaultValue(DSL.field(DSL.raw("now()"), SQLDataType.TIMESTAMPWITHTIMEZONE)), this, "");
 
+    /**
+     * The column <code>shelter_schema.employee.creation_request_id</code>.
+     */
+    public final TableField<EmployeeRecord, UUID> CREATION_REQUEST_ID = createField(DSL.name("creation_request_id"), SQLDataType.UUID, this, "");
+
     private Employee(Name alias, Table<EmployeeRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
     }
@@ -231,7 +237,7 @@ public class Employee extends TableImpl<EmployeeRecord> {
 
     @Override
     public List<UniqueKey<EmployeeRecord>> getUniqueKeys() {
-        return Arrays.asList(Keys.EMPLOYEE_USER_ID_KEY, Keys.UQ_EMPLOYEE_PASSPORT);
+        return Arrays.asList(Keys.EMPLOYEE_CREATION_REQUEST_ID_KEY, Keys.EMPLOYEE_USER_ID_KEY, Keys.UQ_EMPLOYEE_PASSPORT);
     }
 
     @Override

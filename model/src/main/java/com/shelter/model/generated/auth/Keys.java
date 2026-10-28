@@ -29,6 +29,7 @@ public class Keys {
     // -------------------------------------------------------------------------
 
     public static final UniqueKey<UserRolesRecord> USER_ROLES_PKEY = Internal.createUniqueKey(UserRoles.USER_ROLES, DSL.name("user_roles_pkey"), new TableField[] { UserRoles.USER_ROLES.USER_ID, UserRoles.USER_ROLES.ROLE }, true);
+    public static final UniqueKey<UsersRecord> USERS_CREATION_REQUEST_ID_KEY = Internal.createUniqueKey(Users.USERS, DSL.name("users_creation_request_id_key"), new TableField[] { Users.USERS.CREATION_REQUEST_ID }, true);
     public static final UniqueKey<UsersRecord> USERS_EMAIL_KEY = Internal.createUniqueKey(Users.USERS, DSL.name("users_email_key"), new TableField[] { Users.USERS.EMAIL }, true);
     public static final UniqueKey<UsersRecord> USERS_PKEY = Internal.createUniqueKey(Users.USERS, DSL.name("users_pkey"), new TableField[] { Users.USERS.ID }, true);
     public static final UniqueKey<UsersRecord> USERS_USERNAME_KEY = Internal.createUniqueKey(Users.USERS, DSL.name("users_username_key"), new TableField[] { Users.USERS.USERNAME }, true);

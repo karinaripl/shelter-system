@@ -105,15 +105,25 @@ public class ReceiptService {
 
     /**
      * Удаление ошибочной поставки целиком: только неоплаченной и только если по её партиям не было расхода,
-     * списания и перемещений. Оплаченную поставку удаляет администратор вместе с оплатой (шаг 6).
+     * списания и перемещений. Оплаченную поставку удаляет администратор вместе с оплатой (DELETE /admin/supplies/{id}).
      */
     @Transactional
     public void deleteSupply(Long id) {
         boolean paid = receiptRepository.lockSupply(id)
                 .orElseThrow(() -> new NotFoundException("Поставка с id=" + id + " не найдена"));
         if (paid) {
-            throw new BusinessRuleException("Поставка оплачена: удалить её вместе с оплатой может только администратор");
+            throw new BusinessRuleException("Поставка оплачена: удалить её вместе с оплатой может только администратор "
+                    + "(DELETE /admin/supplies/" + id + ")");
         }
+        deleteSupplyRecord(id);
+    }
+
+    /**
+     * Партии и сама поставка, без проверки оплаты: поставка уже заблокирована вызывающим, операцию оплаты
+     * (на неё ссылается поставка) он удаляет сам после этого.
+     */
+    @Transactional
+    public void deleteSupplyRecord(Long id) {
         List<Long> batchIds = batchIds(receiptRepository.supplyItems(List.of(id)).getOrDefault(id, List.of()));
         deleteBatches(batchIds, "поставки");
         receiptRepository.deleteSupply(id);

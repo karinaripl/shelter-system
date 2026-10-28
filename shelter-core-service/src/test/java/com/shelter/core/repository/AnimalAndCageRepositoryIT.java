@@ -162,7 +162,7 @@ class AnimalAndCageRepositoryIT extends PostgresIntegrationTest {
         assertThat(employees.findActiveIdByUserId(10L)).isPresent();
         assertThat(employees.findActiveIdByUserId(11L)).isEmpty();
         assertThat(employees.findActiveIdByUserId(12L)).isEmpty();
-        assertThat(employees.findAllForAdmin()).extracting(r -> r.positionName()).containsOnly("Ветеринар");
+        assertThat(employees.findAllForAdmin(null, null, EmployeeRepository.Status.ALL)).extracting(r -> r.positionName()).containsOnly("Ветеринар");
     }
 
     private static Long event(String name, LocalDate date, Long organizerId) {

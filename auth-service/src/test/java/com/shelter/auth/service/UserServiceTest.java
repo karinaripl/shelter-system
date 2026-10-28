@@ -1,5 +1,7 @@
 package com.shelter.auth.service;
 
+import com.shelter.auth.dto.InternalCreateUserRequest;
+import com.shelter.auth.dto.InternalUserResult;
 import com.shelter.auth.dto.UserResponse;
 import com.shelter.auth.dto.UserRole;
 import com.shelter.auth.exception.OperationNotAllowedException;
@@ -13,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -39,7 +42,7 @@ class UserServiceTest {
 
     @Test
     void createUserSavesAllRolesAndNormalizesEmail() {
-        when(userRepository.insert("vet", "doc@shelter.local", "hash")).thenReturn(user(5L, "doc@shelter.local"));
+        when(userRepository.insert("vet", "doc@shelter.local", "hash", null)).thenReturn(user(5L, "doc@shelter.local"));
 
         UserResponse created = userService.createUser("  vet ", " Doc@Shelter.Local ", "password1",
                 Set.of(UserRole.VET, UserRole.CURATOR));
@@ -53,7 +56,7 @@ class UserServiceTest {
     void userCannotBeCreatedWithoutRoles() {
         assertThatThrownBy(() -> userService.createUser("u", "u@shelter.local", "password1", Set.of()))
                 .isInstanceOf(OperationNotAllowedException.class);
-        verify(userRepository, never()).insert(anyString(), anyString(), anyString());
+        verify(userRepository, never()).insert(anyString(), anyString(), anyString(), any());
     }
 
     @Test
@@ -91,6 +94,70 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.updateStatus(1L, 1L, false))
                 .isInstanceOf(OperationNotAllowedException.class);
         verify(userRepository, never()).updateEnabled(any(), eq(false));
+    }
+
+    // ---------- внутренний API: создание сотрудника ----------
+
+    private static final UUID REQUEST = UUID.fromString("11111111-2222-3333-4444-555555555555");
+
+    private static InternalCreateUserRequest internal(String username, String email) {
+        return new InternalCreateUserRequest(REQUEST, username, email, "password1", Set.of(UserRole.VET));
+    }
+
+    @Test
+    void internalCreateStoresRequestId() {
+        when(userRepository.findByCreationRequestId(REQUEST)).thenReturn(Optional.empty());
+        when(userRepository.insert("vet", "doc@shelter.local", "hash", REQUEST)).thenReturn(user(5L, "doc@shelter.local"));
+
+        InternalUserResult result = userService.createInternal(internal("vet", "doc@shelter.local"));
+
+        assertThat(result.created()).isTrue();
+        assertThat(result.user().id()).isEqualTo(5L);
+    }
+
+    @Test
+    void repeatedInternalCreateReturnsSameUserWithoutDuplicate() {
+        UsersRecord existing = user(5L, "doc@shelter.local");
+        existing.setUsername("vet");
+        when(userRepository.findByCreationRequestId(REQUEST)).thenReturn(Optional.of(existing));
+        when(userRepository.findRoles(5L)).thenReturn(Set.of(UserRole.VET));
+
+        InternalUserResult result = userService.createInternal(internal(" vet ", "Doc@Shelter.local"));
+
+        assertThat(result.created()).isFalse();
+        assertThat(result.user().id()).isEqualTo(5L);
+        verify(userRepository, never()).insert(anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void sameRequestIdWithOtherDataIsConflict() {
+        UsersRecord existing = user(5L, "doc@shelter.local");
+        existing.setUsername("vet");
+        when(userRepository.findByCreationRequestId(REQUEST)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> userService.createInternal(internal("other", "other@shelter.local")))
+                .isInstanceOf(OperationNotAllowedException.class);
+    }
+
+    @Test
+    void compensationDeletesOnlyUserCreatedByThisRequest() {
+        UsersRecord own = user(5L, "doc@shelter.local");
+        own.setCreationRequestId(REQUEST);
+        when(userRepository.findById(5L)).thenReturn(Optional.of(own));
+        userService.deleteCreatedInternal(5L, REQUEST);
+        verify(userRepository).delete(5L);
+
+        when(userRepository.findById(6L)).thenReturn(Optional.of(user(6L, "visitor@shelter.local")));
+        assertThatThrownBy(() -> userService.deleteCreatedInternal(6L, REQUEST))
+                .isInstanceOf(OperationNotAllowedException.class);
+        verify(userRepository, never()).delete(6L);
+    }
+
+    @Test
+    void repeatedCompensationOfMissingUserDoesNothing() {
+        when(userRepository.findById(7L)).thenReturn(Optional.empty());
+        userService.deleteCreatedInternal(7L, REQUEST);
+        verify(userRepository, never()).delete(any());
     }
 
     private static UsersRecord user(Long id, String email) {

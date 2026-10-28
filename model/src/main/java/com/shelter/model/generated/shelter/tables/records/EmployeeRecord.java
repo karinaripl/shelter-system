@@ -8,6 +8,7 @@ import com.shelter.model.generated.shelter.tables.Employee;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import org.jooq.Record1;
 import org.jooq.impl.UpdatableRecordImpl;
@@ -231,6 +232,20 @@ public class EmployeeRecord extends UpdatableRecordImpl<EmployeeRecord> {
         return (OffsetDateTime) get(14);
     }
 
+    /**
+     * Setter for <code>shelter_schema.employee.creation_request_id</code>.
+     */
+    public void setCreationRequestId(UUID value) {
+        set(15, value);
+    }
+
+    /**
+     * Getter for <code>shelter_schema.employee.creation_request_id</code>.
+     */
+    public UUID getCreationRequestId() {
+        return (UUID) get(15);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -254,7 +269,7 @@ public class EmployeeRecord extends UpdatableRecordImpl<EmployeeRecord> {
     /**
      * Create a detached, initialised EmployeeRecord
      */
-    public EmployeeRecord(Long id, Long userId, Long positionId, String fullName, String phone, String email, String address, LocalDate birthDate, LocalDate hireDate, LocalDate terminationDate, Short weeklyHours, String passportSeries, String passportNumber, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+    public EmployeeRecord(Long id, Long userId, Long positionId, String fullName, String phone, String email, String address, LocalDate birthDate, LocalDate hireDate, LocalDate terminationDate, Short weeklyHours, String passportSeries, String passportNumber, OffsetDateTime createdAt, OffsetDateTime updatedAt, UUID creationRequestId) {
         super(Employee.EMPLOYEE);
 
         setId(id);
@@ -272,6 +287,7 @@ public class EmployeeRecord extends UpdatableRecordImpl<EmployeeRecord> {
         setPassportNumber(passportNumber);
         setCreatedAt(createdAt);
         setUpdatedAt(updatedAt);
+        setCreationRequestId(creationRequestId);
         resetTouchedOnNotNull();
     }
 }

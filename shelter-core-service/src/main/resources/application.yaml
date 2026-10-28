@@ -15,6 +15,13 @@ spring:
       # Фото животных: до 5 МБ (проверяется и в коде, чтобы вернуть понятное сообщение)
       max-file-size: 5MB
       max-request-size: 6MB
+  cloud:
+    openfeign:
+      client:
+        config:
+          auth-service:
+            connect-timeout: 2000
+            read-timeout: 5000
   jackson:
     default-property-inclusion: always
 
@@ -26,6 +33,12 @@ gateway:
     secret: ${JWT_SECRET}
     # Публичный каталог и фото из него — без входа в систему
     public-paths: /public/**
+
+# Учётные записи сотрудников: внутренний API auth-service (/internal/users)
+auth-service:
+  url: ${AUTH_SERVICE_URL:http://localhost:8180}
+  # Передаётся в заголовке X-Internal-Token; то же значение, что у auth-service
+  internal-token: ${INTERNAL_API_TOKEN}
 
 shelter:
   photos:

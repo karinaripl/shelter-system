@@ -11,7 +11,15 @@ import com.shelter.core.service.VolunteerService;
 import com.shelter.core.service.AnimalService;
 import com.shelter.core.service.CageService;
 import com.shelter.core.service.DictionaryService;
+import com.shelter.core.service.BenefactorService;
+import com.shelter.core.service.DonationService;
+import com.shelter.core.service.EmployeeAdminService;
 import com.shelter.core.service.EmployeeService;
+import com.shelter.core.service.FinanceReportService;
+import com.shelter.core.service.FinanceService;
+import com.shelter.core.service.PositionService;
+import com.shelter.core.service.SalaryService;
+import com.shelter.core.service.SupplyPaymentService;
 import com.shelter.core.service.MedicalCardService;
 import com.shelter.core.service.MedicalRecordService;
 import com.shelter.core.service.ProcedureService;
@@ -80,6 +88,13 @@ class AccessMatrixWebMvcTest {
     private static final String VOLUNTEER_BODY = "{\"fullName\":\"Гусева Полина\"}";
     private static final String EVENT_BODY = "{\"name\":\"Выставка\",\"eventDate\":\"2026-10-19\"}";
     private static final String PRODUCT_BODY = "{\"name\":\"Корм\",\"categoryId\":1,\"unitOfMeasure\":\"кг\"}";
+    private static final Set<String> ADMIN = Set.of("ADMIN");
+    private static final String EMPLOYEE_BODY = "{\"fullName\":\"Иванов Иван\",\"positionId\":1,\"weeklyHours\":40}";
+    private static final String EMPLOYEE_CREATE_BODY = "{\"employee\":" + EMPLOYEE_BODY + ",\"account\":{\"username\":"
+            + "\"ivanov\",\"email\":\"ivanov@test.local\",\"password\":\"password1\",\"roles\":[\"VET\"]}}";
+    private static final String POSITION_BODY = "{\"name\":\"Санитар\",\"baseSalary\":45000.00}";
+    private static final String BENEFACTOR_BODY = "{\"fullName\":\"Фонд\",\"phone\":\"+79990000000\"}";
+    private static final String MANUAL_BODY = "{\"direction\":\"EXPENSE\",\"amount\":1200,\"description\":\"Ремонт клетки\"}";
 
     /** Эндпоинт и роли, которым он разрешён. Тела запросов валидны: иначе запрещённая роль получила бы 400. */
     record Endpoint(HttpMethod method, String path, String body, boolean multipart, Set<String> allowed) {
@@ -233,8 +248,72 @@ class AccessMatrixWebMvcTest {
                 // Отчёт об эффективности мероприятий: ADMIN, ADOPTION_MANAGER, COORDINATOR
                 new Endpoint(HttpMethod.GET, "/reports/event-effectiveness", null, false, EVENTS_WRITE),
 
-                new Endpoint(HttpMethod.GET, "/admin/employees", null, false, Set.of("ADMIN"))
+                new Endpoint(HttpMethod.GET, "/admin/employees", null, false, ADMIN)
         );
+    }
+
+    /** Админ-панель шага 6.2: всё только ADMIN (шлюз, правило /admin/** в стартере и @PreAuthorize). */
+    static List<Endpoint> adminEndpoints() {
+        return List.of(
+                new Endpoint(HttpMethod.GET, "/admin/employees?search=Иван&status=WORKING", null, false, ADMIN),
+                new Endpoint(HttpMethod.GET, "/admin/employees/1", null, false, ADMIN),
+                new Endpoint(HttpMethod.POST, "/admin/employees", EMPLOYEE_CREATE_BODY, false, ADMIN),
+                new Endpoint(HttpMethod.PUT, "/admin/employees/1", EMPLOYEE_BODY, false, ADMIN),
+                new Endpoint(HttpMethod.PUT, "/admin/employees/1/account", "{\"userId\":5}", false, ADMIN),
+                new Endpoint(HttpMethod.DELETE, "/admin/employees/1/account", null, false, ADMIN),
+                new Endpoint(HttpMethod.POST, "/admin/employees/1/termination", "{\"terminationDate\":\"2026-10-01\"}",
+                        false, ADMIN),
+                new Endpoint(HttpMethod.DELETE, "/admin/employees/1/termination", null, false, ADMIN),
+
+                new Endpoint(HttpMethod.GET, "/admin/positions", null, false, ADMIN),
+                new Endpoint(HttpMethod.GET, "/admin/positions/1", null, false, ADMIN),
+                new Endpoint(HttpMethod.POST, "/admin/positions", POSITION_BODY, false, ADMIN),
+                new Endpoint(HttpMethod.PUT, "/admin/positions/1", POSITION_BODY, false, ADMIN),
+                new Endpoint(HttpMethod.DELETE, "/admin/positions/1", null, false, ADMIN),
+
+                new Endpoint(HttpMethod.GET, "/admin/benefactors", null, false, ADMIN),
+                new Endpoint(HttpMethod.GET, "/admin/benefactors/1", null, false, ADMIN),
+                new Endpoint(HttpMethod.POST, "/admin/benefactors", BENEFACTOR_BODY, false, ADMIN),
+                new Endpoint(HttpMethod.PUT, "/admin/benefactors/1", BENEFACTOR_BODY, false, ADMIN),
+                new Endpoint(HttpMethod.DELETE, "/admin/benefactors/1", null, false, ADMIN),
+
+                new Endpoint(HttpMethod.GET, "/admin/donations?type=MONEY", null, false, ADMIN),
+                new Endpoint(HttpMethod.GET, "/admin/donations/1", null, false, ADMIN),
+                new Endpoint(HttpMethod.POST, "/admin/donations", "{\"amount\":1500.50}", false, ADMIN),
+                new Endpoint(HttpMethod.DELETE, "/admin/donations/1", null, false, ADMIN),
+
+                new Endpoint(HttpMethod.GET, "/admin/finance/transactions?direction=EXPENSE&category=OTHER", null, false, ADMIN),
+                new Endpoint(HttpMethod.GET, "/admin/finance/transactions/1", null, false, ADMIN),
+                new Endpoint(HttpMethod.POST, "/admin/finance/transactions", MANUAL_BODY, false, ADMIN),
+                new Endpoint(HttpMethod.DELETE, "/admin/finance/transactions/1", null, false, ADMIN),
+                new Endpoint(HttpMethod.GET, "/admin/finance/balance", null, false, ADMIN),
+
+                new Endpoint(HttpMethod.GET, "/admin/supplies/unpaid", null, false, ADMIN),
+                new Endpoint(HttpMethod.POST, "/admin/supplies/1/payment", "{}", false, ADMIN),
+                new Endpoint(HttpMethod.DELETE, "/admin/supplies/1/payment", null, false, ADMIN),
+                new Endpoint(HttpMethod.DELETE, "/admin/supplies/1", null, false, ADMIN),
+
+                new Endpoint(HttpMethod.GET, "/admin/salaries/preview?month=2026-10", null, false, ADMIN),
+                new Endpoint(HttpMethod.POST, "/admin/salaries", "{\"month\":\"2026-10\"}", false, ADMIN),
+                new Endpoint(HttpMethod.GET, "/admin/salaries/2026-10", null, false, ADMIN),
+                new Endpoint(HttpMethod.DELETE, "/admin/salaries/2026-10", null, false, ADMIN),
+
+                new Endpoint(HttpMethod.GET, "/admin/reports/finance/categories?from=2026-01-01&to=2026-10-31", null,
+                        false, ADMIN),
+                new Endpoint(HttpMethod.GET, "/admin/reports/finance/monthly", null, false, ADMIN),
+                new Endpoint(HttpMethod.GET, "/admin/reports/finance/balance", null, false, ADMIN),
+                new Endpoint(HttpMethod.GET, "/admin/reports/donations/benefactors", null, false, ADMIN)
+        );
+    }
+
+    static Stream<Arguments> adminEndpointAndRole() {
+        List<Arguments> cases = new ArrayList<>();
+        for (Endpoint endpoint : adminEndpoints()) {
+            for (String role : ROLES) {
+                cases.add(Arguments.of(endpoint, role));
+            }
+        }
+        return cases.stream();
     }
 
     static List<Endpoint> publicEndpoints() {
@@ -300,6 +379,22 @@ class AccessMatrixWebMvcTest {
     private EventService eventService;
     @MockitoBean
     private EventReportService eventReportService;
+    @MockitoBean
+    private EmployeeAdminService employeeAdminService;
+    @MockitoBean
+    private PositionService positionService;
+    @MockitoBean
+    private BenefactorService benefactorService;
+    @MockitoBean
+    private DonationService donationService;
+    @MockitoBean
+    private FinanceService financeService;
+    @MockitoBean
+    private SupplyPaymentService supplyPaymentService;
+    @MockitoBean
+    private SalaryService salaryService;
+    @MockitoBean
+    private FinanceReportService financeReportService;
 
     /** Полная анкета волонтёра — так её возвращает сервис; что показать роли, решает контроллер. */
     private static final VolunteerResponse FULL_VOLUNTEER = new VolunteerResponse(5L, "Гусева Полина", "89100000001",
@@ -311,6 +406,7 @@ class AccessMatrixWebMvcTest {
         var file = new AnimalPhotoService.PhotoFile(new byte[]{1}, MediaType.IMAGE_PNG);
         when(photoService.file(any(), any())).thenReturn(file);
         when(photoService.publicFile(any())).thenReturn(file);
+        when(employeeAdminService.create(any(), any())).thenReturn(new EmployeeAdminService.CreateResult(null, true));
         when(volunteerService.findById(5L)).thenReturn(FULL_VOLUNTEER);
         when(volunteerService.findPage(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(),
                 org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt()))
@@ -413,10 +509,84 @@ class AccessMatrixWebMvcTest {
         }
     }
 
+    // ---------- админ-панель шага 6.2 ----------
+
+    @ParameterizedTest(name = "{0} — {1}")
+    @MethodSource("adminEndpointAndRole")
+    void adminPanelIsOnlyForAdmin(Endpoint endpoint, String role) throws Exception {
+        int status = mvc.perform(signed(request(endpoint), role)).andReturn().getResponse().getStatus();
+        if (role.equals("ADMIN")) {
+            assertThat(status).as("%s для %s", endpoint, role).isBetween(200, 299);
+        } else {
+            assertThat(status).as("%s для %s", endpoint, role).isEqualTo(403);
+        }
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("adminEndpoints")
+    void adminPanelWithoutGatewayHeadersIsUnauthorized(Endpoint endpoint) throws Exception {
+        mvc.perform(request(endpoint))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Требуется авторизация"));
+    }
+
+    @Test
+    void severalRolesWithoutAdminAreStillForbidden() throws Exception {
+        mvc.perform(signed(MockMvcRequestBuilders.get("/admin/finance/balance"),
+                        "VET,CURATOR,ADOPTION_MANAGER,COORDINATOR"))
+                .andExpect(status().isForbidden());
+    }
+
+    @ParameterizedTest(name = "{0} {1}")
+    @MethodSource("invalidMoneyBodies")
+    void invalidMoneyIsBadRequest(String path, String body) throws Exception {
+        mvc.perform(signed(MockMvcRequestBuilders.post(path)
+                        .contentType(MediaType.APPLICATION_JSON).content(body), "ADMIN"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    static Stream<Arguments> invalidMoneyBodies() {
+        return Stream.of(
+                Arguments.of("/admin/donations", "{\"amount\":0}"),
+                Arguments.of("/admin/donations", "{\"amount\":-100}"),
+                Arguments.of("/admin/donations", "{\"amount\":10.005}"),
+                Arguments.of("/admin/donations", "{}"),
+                Arguments.of("/admin/finance/transactions", "{\"direction\":\"EXPENSE\",\"amount\":0.001,\"description\":\"x\"}"),
+                Arguments.of("/admin/finance/transactions", "{\"direction\":\"EXPENSE\",\"amount\":100,\"description\":\" \"}"),
+                Arguments.of("/admin/finance/transactions", "{\"amount\":100,\"description\":\"Ремонт\"}"),
+                Arguments.of("/admin/finance/transactions", "{\"direction\":\"SIDEWAYS\",\"amount\":1,\"description\":\"x\"}"),
+                Arguments.of("/admin/positions", "{\"name\":\"Санитар\",\"baseSalary\":-1}"),
+                Arguments.of("/admin/positions", "{\"name\":\"Санитар\",\"baseSalary\":100.123}"),
+                Arguments.of("/admin/salaries", "{\"month\":\"2026-13\"}"),
+                Arguments.of("/admin/salaries", "{}"),
+                Arguments.of("/admin/employees", "{\"employee\":{\"fullName\":\"Иванов\",\"positionId\":1,\"weeklyHours\":200}}"),
+                Arguments.of("/admin/employees", "{\"employee\":{\"fullName\":\"Иванов\",\"positionId\":1},"
+                        + "\"account\":{\"username\":\"iv\",\"email\":\"iv@test.local\",\"password\":\"short\",\"roles\":[\"VET\"]}}"),
+                Arguments.of("/admin/employees/1/termination", "{}")
+        );
+    }
+
+    @Test
+    void invalidIdempotencyKeyIsBadRequest() throws Exception {
+        mvc.perform(signed(MockMvcRequestBuilders.post("/admin/employees").header("Idempotency-Key", "не-uuid")
+                        .contentType(MediaType.APPLICATION_JSON).content(EMPLOYEE_CREATE_BODY), "ADMIN"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void repeatedEmployeeCreationReturnsOk() throws Exception {
+        when(employeeAdminService.create(any(), any())).thenReturn(new EmployeeAdminService.CreateResult(null, false));
+        mvc.perform(signed(MockMvcRequestBuilders.post("/admin/employees")
+                        .header("Idempotency-Key", "11111111-2222-3333-4444-555555555555")
+                        .contentType(MediaType.APPLICATION_JSON).content(EMPLOYEE_CREATE_BODY), "ADMIN"))
+                .andExpect(status().isOk());
+    }
+
     @Test
     void adminPrefixIsClosedForEveryoneButAdminEvenWithoutHandler() throws Exception {
         for (String role : ROLES) {
-            int status = mvc.perform(signed(MockMvcRequestBuilders.get("/admin/finance/balance"), role))
+            int status = mvc.perform(signed(MockMvcRequestBuilders.get("/admin/no-such-section"), role))
                     .andReturn().getResponse().getStatus();
             // ADMIN проходит правило /admin/** и получает 404 (эндпоинта пока нет), остальные — 403
             assertThat(status).as(role).isEqualTo(role.equals("ADMIN") ? 404 : 403);

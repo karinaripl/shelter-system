@@ -7,6 +7,7 @@ package com.shelter.model.generated.auth.tables.records;
 import com.shelter.model.generated.auth.tables.Users;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import org.jooq.Record1;
 import org.jooq.impl.UpdatableRecordImpl;
@@ -104,6 +105,20 @@ public class UsersRecord extends UpdatableRecordImpl<UsersRecord> {
         return (Boolean) get(5);
     }
 
+    /**
+     * Setter for <code>users_schema.users.creation_request_id</code>.
+     */
+    public void setCreationRequestId(UUID value) {
+        set(6, value);
+    }
+
+    /**
+     * Getter for <code>users_schema.users.creation_request_id</code>.
+     */
+    public UUID getCreationRequestId() {
+        return (UUID) get(6);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -127,7 +142,7 @@ public class UsersRecord extends UpdatableRecordImpl<UsersRecord> {
     /**
      * Create a detached, initialised UsersRecord
      */
-    public UsersRecord(Long id, String username, String email, String passwordHash, LocalDateTime createdAt, Boolean enabled) {
+    public UsersRecord(Long id, String username, String email, String passwordHash, LocalDateTime createdAt, Boolean enabled, UUID creationRequestId) {
         super(Users.USERS);
 
         setId(id);
@@ -136,6 +151,7 @@ public class UsersRecord extends UpdatableRecordImpl<UsersRecord> {
         setPasswordHash(passwordHash);
         setCreatedAt(createdAt);
         setEnabled(enabled);
+        setCreationRequestId(creationRequestId);
         resetTouchedOnNotNull();
     }
 }
